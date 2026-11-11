@@ -30,7 +30,10 @@ declare v_kind text; v_title text; v_body text; v_link text;
 begin
   -- l'administrateur n'est pas notifié de ses propres actions
   if public.is_admin() then return null; end if;
-  if tg_table_name = 'messages' and new.from_admin then return null; end if;
+  -- le champ from_admin n'existe que sur « messages » : on ne le lit que pour cette table
+  if tg_table_name = 'messages' then
+    if new.from_admin then return null; end if;
+  end if;
   v_link := '#/admin';
   case tg_table_name
     when 'profiles' then
