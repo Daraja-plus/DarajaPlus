@@ -140,7 +140,10 @@
 
   /* ---------- Comptes ---------- */
   function actionsForAccount(p) {
-    if (p.status === 'pending' || p.status === 'rejected') return '<button class="btn btn-sm btn-primary" type="button" data-review="' + esc(p.id) + '">Examiner</button>';
+    if (p.status === 'pending' || p.status === 'rejected') {
+      return '<button class="btn btn-sm btn-outline" type="button" data-review="' + esc(p.id) + '">Examiner</button> ' +
+        '<button class="btn btn-sm btn-primary" type="button" data-quick-approve="' + esc(p.id) + '">Valider</button>';
+    }
     if (p.status === 'active') return '<button class="btn btn-sm btn-outline" type="button" data-suspend="' + esc(p.id) + '">Suspendre</button>';
     if (p.status === 'suspended') return '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(p.id) + '">Réactiver</button>';
     return '—';
@@ -168,6 +171,18 @@
       ], rows, 'Aucun compte dans cette catégorie.'));
 
     act(el, '[data-review]', function (b) { return openReview(map[b.dataset.review], lk); });
+    act(el, '[data-quick-approve]', async function (b) {
+      var p = map[b.dataset.quickApprove];
+      /* Hôte, Agent et Bénéficiaire : l'affectation (zone, Hôte, Agent, catégorie) doit être choisie avant validation. */
+      if (p.role !== 'partner') {
+        ui.toast('Choisissez l’affectation de cette personne, puis validez.', 'ok');
+        return openReview(p, lk);
+      }
+      if (!(await ui.confirm('Valider le compte de ' + pname(p) + ' ? Il aura accès à son espace. La décision de financement lui restera.', 'Valider'))) return;
+      await DP.api.rpc('admin_review_account', { p_profile: p.id, p_decision: 'approve', p_reason: null, p_zone: null, p_host: null, p_agent: null, p_category: null, p_sponsor: null, p_quartier: null });
+      ui.toast('Compte validé.', 'ok');
+      refresh();
+    });
     act(el, '[data-suspend]', async function (b) {
       var p = map[b.dataset.suspend];
       if (!(await ui.confirm('Suspendre le compte de ' + pname(p) + ' ? La personne ne pourra plus accéder à la plateforme jusqu’à réactivation.', 'Suspendre'))) return;
