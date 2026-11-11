@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 150" role="img" aria-label="Logo DarajaPlus">
+  <title>DarajaPlus</title>
+  <!-- Le plus jaune, au-dessus du D -->
+  <rect x="49" y="16" width="32" height="8" rx="2" fill="#facc15"/>
+  <rect x="61" y="8" width="8" height="32" rx="2" fill="#facc15"/>
+  <!-- Le D vert -->
+  <path fill="#15803d" fill-rule="evenodd"
+        d="M30 50 H64 C96 50 108 74 108 95 C108 118 96 140 64 140 H30 Z
+           M50 70 H62 C76 70 84 80 84 95 C84 110 76 120 62 120 H50 Z"/>
+</svg>
