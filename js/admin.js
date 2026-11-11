@@ -826,7 +826,11 @@
     el.innerHTML = ui.header('Demandes de contact', 'Messages reçus depuis le site public.') +
       ui.card(null, ui.table([
         { label: 'Reçu le', render: function (c) { return ui.dateTime(c.created_at); } },
-        { label: 'Personne', render: function (c) { return '<strong>' + esc(c.name) + '</strong><div class="small muted">' + esc(c.email || '') + ' ' + esc(c.phone || '') + '</div>'; } },
+        { label: 'Personne', render: function (c) {
+          var contact = (c.email ? '<a href="mailto:' + esc(c.email) + '?subject=' + encodeURIComponent('Re : ' + (c.subject || 'DarajaPlus')) + '">' + esc(c.email) + '</a>' : '') +
+            (c.phone ? (c.email ? ' · ' : '') + '<a href="tel:' + esc(c.phone) + '">' + esc(c.phone) + '</a>' : '');
+          return '<strong>' + esc(c.name) + '</strong><div class="small">' + (contact || '<span class="muted">Pas de coordonnées</span>') + '</div>';
+        } },
         { label: 'Sujet', render: function (c) { return esc(c.subject); } },
         { label: 'Message', render: function (c) { return '<div class="pre-wrap">' + esc(c.message) + '</div>'; } },
         { label: 'Statut', render: function (c) { return c.status === 'new' ? ui.badge('pending') : ui.badge('validated'); } },

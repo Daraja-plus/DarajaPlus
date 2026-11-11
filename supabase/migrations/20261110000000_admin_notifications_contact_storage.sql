@@ -81,7 +81,7 @@ begin
       v_link := '#/admin/beneficiaires';
     when 'contact_requests' then
       v_kind := 'contact'; v_title := 'Nouveau message de contact';
-      v_body := coalesce(new.subject,'') || ' — ' || coalesce(new.name,'');
+      v_body := left(coalesce(new.name,'') || ' (' || coalesce(new.email, new.phone, '—') || ') : ' || coalesce(new.message,''), 300);
       v_link := '#/admin/contacts';
     else return null;
   end case;
