@@ -256,7 +256,7 @@
   /* ---------- Shells et navigation ---------- */
   function publicTopbar() {
     return '<div class="topbar-inner"><a class="brand" href="#/" aria-label="DarajaPlus, accueil">' +
-      '<img src="assets/logo.svg" alt="" class="logo" width="36" height="42"><span>DarajaPlus</span></a>' +
+      '<img src="assets/logo-daraja.png" alt="" class="logo" width="40" height="40"><span>DarajaPlus</span></a>' +
       '<nav class="topnav" aria-label="Navigation principale">' +
       publicNav.map(function (n) { return '<a href="' + n[1] + '">' + esc(n[0]) + '</a>'; }).join('') + '</nav>' +
       '<div class="topbar-actions">' +
@@ -267,7 +267,7 @@
 
   function privateTopbar(profile, unread) {
     return '<div class="topbar-inner"><a class="brand" href="' + esc(DP.app.homeFor(profile.role)) + '" aria-label="DarajaPlus, mon espace">' +
-      '<img src="assets/logo.svg" alt="" class="logo" width="36" height="42"><span>DarajaPlus</span></a>' +
+      '<img src="assets/logo-daraja.png" alt="" class="logo" width="40" height="40"><span>DarajaPlus</span></a>' +
       '<div class="topbar-actions">' +
       '<span class="who"><strong>' + esc(DP.app.displayName(profile)) + '</strong><span class="muted small">' +
       esc(DP.labels.role[profile.role]) + (profile.category ? ' · ' + esc(DP.labels.category[profile.category]) : '') + '</span></span>' +

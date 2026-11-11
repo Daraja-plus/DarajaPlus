@@ -101,8 +101,7 @@
             '<div class="btn-row"><a class="btn btn-primary" href="#/inscription">Créer mon compte</a>' +
             '<a class="btn btn-outline" href="#/connexion">Se connecter</a></div>' +
           '</div>' +
-          '<div class="hero-art"><img class="big-logo" src="assets/logo.svg" alt="Logo DarajaPlus" width="120" height="139">' +
-            '<p class="small muted">Plateforme d’accompagnement et de mise en relation</p></div></section>' +
+          '<div class="hero-art"><img class="hero-poster" src="assets/affiche-daraja-plus.webp" alt="Affiche DarajaPlus : Vos idées méritent de devenir réalités. Entrepreneurs, porteurs de projets, investisseurs et partenaires, ensemble." width="900" height="1125" fetchpriority="high"></div></section>' +
           '<h2>Découvrir DarajaPlus</h2>' +
           '<div class="rubric-grid">' + RUBRICS.map(function (r) {
             return '<a class="rubric" href="' + r[2] + '"><span class="rubric-icon" aria-hidden="true">' + r[0] + '</span>' +

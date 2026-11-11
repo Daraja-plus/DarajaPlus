@@ -209,8 +209,11 @@ textarea.input { min-height: 96px; resize: vertical; }
 .hero h1 { font-size: clamp(1.7rem, 4vw, 2.6rem); }
 .hero .lead { font-size: 1.1rem; color: var(--ink-soft); }
 .hero-badge { display: inline-block; background: var(--yellow); color: var(--ink); font-weight: 700; padding: .25rem .7rem; border-radius: 999px; font-size: .85rem; margin-bottom: .75rem; }
-.hero-art { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 1.25rem; box-shadow: var(--shadow); text-align: center; }
-.hero-art .big-logo { width: 120px; height: auto; margin: .5rem auto; }
+.hero-art { position: relative; text-align: center; }
+.hero-art::before { content: ""; position: absolute; inset: 8% -3% -3% 8%; border-radius: 28px; background: linear-gradient(135deg, var(--green) 0%, var(--yellow) 100%); opacity: .3; filter: blur(16px); z-index: 0; }
+.hero-poster { position: relative; z-index: 1; display: block; width: 100%; max-width: 420px; height: auto; margin: 0 auto; border-radius: 22px; border: 1px solid var(--line); box-shadow: 0 18px 40px rgba(15, 95, 45, .22); transform: rotate(-1.5deg); transition: transform .3s ease; }
+.hero-poster:hover { transform: rotate(0deg) translateY(-3px); }
+@media (max-width: 799px) { .hero-poster { max-width: 360px; transform: none; } }
 .rubric-grid { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); margin: 1rem 0 2rem; }
 .rubric { display: flex; flex-direction: column; gap: .35rem; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 1rem; text-decoration: none; color: var(--ink); box-shadow: var(--shadow); min-height: 120px; }
 .rubric:hover { border-color: var(--green); transform: translateY(-1px); }
