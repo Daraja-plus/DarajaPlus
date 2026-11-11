@@ -368,9 +368,32 @@
 
   DP.navigate = navigate;
 
+  /* Retour d'un lien e-mail (réinitialisation du mot de passe) : on ouvre une session à partir des jetons
+     contenus dans l'adresse, on efface les jetons de l'adresse, puis on envoie l'utilisateur vers « Mon compte »
+     pour qu'il choisisse son nouveau mot de passe. */
+  async function handleAuthLink() {
+    var h = location.hash || '';
+    if (h.indexOf('access_token=') === -1) return;
+    var p = new URLSearchParams(h.replace(/^#/, ''));
+    var access = p.get('access_token');
+    var refresh = p.get('refresh_token');
+    var expiresIn = parseInt(p.get('expires_in'), 10) || 3600;
+    history.replaceState(null, '', location.pathname + location.search + '#/mon-compte');
+    if (!access) return;
+    try {
+      await DP.api.adoptRecoveryLink(access, refresh, expiresIn);
+      DP.app.profile = null;
+      DP.ui.toast('Choisissez votre nouveau mot de passe ci-dessous, puis enregistrez.', 'ok');
+    } catch (e) {
+      DP.ui.toast(DP.api.translate(e && e.message) || 'Lien invalide ou expiré.', 'bad');
+      location.hash = '#/mot-de-passe-oublie';
+    }
+  }
+
   DP.start = async function () {
     DP.api.init();
     window.addEventListener('hashchange', navigate);
+    await handleAuthLink();
     if (!location.hash) location.hash = '#/';
     await navigate();
   };

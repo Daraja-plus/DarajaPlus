@@ -126,6 +126,13 @@
     updatePassword: function (password) {
       return call('PUT', base() + '/auth/v1/user', { body: { password: password } });
     },
+    /* Lien reçu par e-mail (réinitialisation du mot de passe) : Supabase renvoie les jetons dans l'adresse. */
+    adoptRecoveryLink: async function (accessToken, refreshToken, expiresIn) {
+      setSession({ access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn });
+      var user = await call('GET', base() + '/auth/v1/user');
+      if (!user || !user.id) { setSession(null); throw new Error('Lien invalide ou expiré. Demandez un nouveau lien.'); }
+      return setSession({ access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn, user: user });
+    },
 
     /* ---- Données (PostgREST) : params = { select, colonne: 'eq.valeur', order, limit, offset } ---- */
     get: function (table, params) {
