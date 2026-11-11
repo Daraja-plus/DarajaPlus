@@ -358,7 +358,34 @@
     } catch (e) {
       if (token === navToken) view.innerHTML = DP.ui.errorBox(e);
     }
+    if (token === navToken && priv) await validationBanner(view, token);
     if (token === navToken) window.scrollTo(0, 0);
+  }
+
+  /* Confirmation de validation : tant que la personne n'a pas accusé réception, la date et l'heure
+     de validation s'affichent en haut de son espace. La notification reste dans « Notifications ». */
+  async function validationBanner(view, token) {
+    if (!DP.api.uid) return;
+    var rows = [];
+    try {
+      rows = await DP.api.get('notifications', { select: 'id,body', recipient_id: 'eq.' + DP.api.uid,
+        kind: 'eq.compte_valide', read_at: 'is.null', order: 'created_at.desc', limit: 1 });
+    } catch (e) { return; }
+    if (token !== navToken || !rows.length) return;
+    var n = rows[0];
+    var box = document.createElement('div');
+    box.className = 'validation-banner';
+    box.innerHTML = DP.ui.alert('ok', '<strong>Votre compte est validé.</strong><br>' + esc(n.body) +
+      '<div class="btn-row"><button class="btn btn-sm btn-primary" type="button" data-ack-validation="' + esc(n.id) + '">J’ai compris</button></div>');
+    view.insertBefore(box, view.firstChild);
+    var btn = box.querySelector('[data-ack-validation]');
+    btn.addEventListener('click', async function () {
+      btn.disabled = true;
+      try {
+        await DP.api.update('notifications', { id: 'eq.' + n.id }, { read_at: new Date().toISOString() });
+        box.remove();
+      } catch (e) { btn.disabled = false; DP.ui.toast(DP.ui.errMsg(e), 'bad'); }
+    });
   }
 
   document.addEventListener('click', function (e) {

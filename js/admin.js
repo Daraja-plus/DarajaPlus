@@ -139,6 +139,16 @@
   }
 
   /* ---------- Comptes ---------- */
+  /* Confirmation après validation : la date et l’heure exactes sont relues en base. */
+  async function confirmValidated(p) {
+    var when = '';
+    try {
+      var r = await DP.api.get('profiles', { select: 'validated_at', id: 'eq.' + p.id });
+      if (r[0] && r[0].validated_at) when = ' le ' + ui.dateTime(r[0].validated_at);
+    } catch (e) { /* l’heure reste facultative dans la confirmation */ }
+    ui.toast('Compte de ' + pname(p) + ' validé' + when + '. La personne est prévenue sur son compte.', 'ok');
+  }
+
   function actionsForAccount(p) {
     if (p.status === 'pending' || p.status === 'rejected') {
       return '<button class="btn btn-sm btn-outline" type="button" data-review="' + esc(p.id) + '">Examiner</button> ' +
@@ -166,6 +176,7 @@
         { label: 'Téléphone', render: function (p) { return esc(p.phone || '—'); } },
         { label: 'Inscrit le', render: function (p) { return ui.date(p.created_at); } },
         { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
+        { label: 'Validé le', render: function (p) { return p.validated_at ? ui.dateTime(p.validated_at) : '—'; } },
         { label: 'Motif de refus', render: function (p) { return esc(short(p.rejection_reason, 80) || '—'); } },
         { label: 'Action', cls: 'actions', render: actionsForAccount }
       ], rows, 'Aucun compte dans cette catégorie.'));
@@ -175,12 +186,12 @@
       var p = map[b.dataset.quickApprove];
       /* Hôte, Agent et Bénéficiaire : l'affectation (zone, Hôte, Agent, catégorie) doit être choisie avant validation. */
       if (p.role !== 'partner') {
-        ui.toast('Choisissez l’affectation de cette personne, puis validez.', 'ok');
+        ui.toast('Pour cette personne, choisissez son affectation dans la fenêtre qui s’ouvre, puis cliquez sur « Valider le compte ».', 'ok');
         return openReview(p, lk);
       }
       if (!(await ui.confirm('Valider le compte de ' + pname(p) + ' ? Il aura accès à son espace. La décision de financement lui restera.', 'Valider'))) return;
       await DP.api.rpc('admin_review_account', { p_profile: p.id, p_decision: 'approve', p_reason: null, p_zone: null, p_host: null, p_agent: null, p_category: null, p_sponsor: null, p_quartier: null });
-      ui.toast('Compte validé.', 'ok');
+      await confirmValidated(p);
       refresh();
     });
     act(el, '[data-suspend]', async function (b) {
@@ -246,6 +257,14 @@
       body = '<p class="small muted">Compte partenaire : vérifiez l’organisation puis validez. La décision de financement reste au partenaire.</p>';
     }
 
+    /* Sans Hôte actif ni Agent actif, un Agent ou un Bénéficiaire ne peut pas être rattaché : on le dit clairement. */
+    if (p.role === 'beneficiary' && !lk.agents.length) {
+      body = ui.alert('warn', '<strong>Aucun Agent actif pour le moment.</strong> Un bénéficiaire est rattaché à un Agent : validez d’abord un Hôte, puis un Agent, avant ce bénéficiaire.') + body;
+    }
+    if (p.role === 'agent' && !lk.hosts.some(function (h) { return h.status === 'active'; })) {
+      body = ui.alert('warn', '<strong>Aucun Hôte actif pour le moment.</strong> Un Agent est rattaché à un Hôte : validez d’abord l’Hôte de sa zone.') + body;
+    }
+
     var reason = ui.field({ name: 'reason', label: 'Motif (obligatoire en cas de refus)', type: 'textarea', rows: 3, full: true });
     var m = ui.modal('Examiner le compte', info + '<form class="form" id="rv">' + body + reason + '</form>',
       '<button type="button" class="btn btn-outline" data-decision="reject">Refuser</button> ' +
@@ -307,7 +326,7 @@
       }
       await DP.api.rpc('admin_review_account', payload);
       m.close();
-      ui.toast('Compte validé.', 'ok');
+      await confirmValidated(p);
       refresh();
     });
   }

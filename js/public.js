@@ -494,7 +494,25 @@
         el.innerHTML = head0 + body +
           '<div class="btn-row"><a class="btn btn-outline" href="#/contact">Contacter l’administration</a>' +
           '<button class="btn btn-ghost" type="button" data-logout>Se déconnecter</button></div>';
+        if (p.status === 'pending') watchValidation(el, head0);
       }
     }
   ]);
+
+  /* Page « en attente » : le statut est relu toutes les 15 secondes. Dès que le compte est validé,
+     la personne voit la confirmation avec la date et l’heure, puis peut commencer sans recharger la page. */
+  function watchValidation(el, head0) {
+    var timer = setInterval(async function () {
+      if (!document.body.contains(el)) { clearInterval(timer); return; }
+      var fresh;
+      try { fresh = await DP.app.loadProfile(); } catch (e) { return; }
+      if (!fresh || (fresh.role !== 'admin' && fresh.status !== 'active')) return;
+      clearInterval(timer);
+      var when = fresh.validated_at ? '<br>Validé le ' + DP.ui.esc(DP.ui.dateTime(fresh.validated_at)) + '.' : '';
+      el.innerHTML = head0 +
+        DP.ui.alert('ok', '<strong>Votre compte est validé.</strong>' + when +
+          '<br>Vous pouvez commencer dès maintenant.') +
+        '<div class="btn-row"><a class="btn btn-primary" href="' + DP.ui.esc(DP.app.homeFor(fresh.role)) + '">Commencer</a></div>';
+    }, 15000);
+  }
 })();
