@@ -2,7 +2,7 @@
    Objectif : l'application s'ouvre même avec une connexion faible ou coupée.
    Les données (Supabase et autres services externes) ne sont jamais mises en cache : elles restent en ligne. */
 
-const CACHE = 'daraja-app-v1';
+const CACHE = 'daraja-app-v2';
 const SHELL = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const SHELL = [
   'js/config.js',
   'js/api.js',
   'js/ui.js',
+  'js/push.js',
   'js/app.js',
   'js/categories.js',
   'js/public.js',
@@ -75,4 +76,37 @@ self.addEventListener('fetch', function (event) {
 
   var isPage = req.mode === 'navigate' || url.pathname.endsWith('/') || url.pathname.endsWith('/index.html');
   event.respondWith(isPage ? networkFirst(req) : staleWhileRevalidate(req));
+});
+
+/* Notifications sur téléphone : le message reçu est volontairement générique. */
+self.addEventListener('push', function (event) {
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
+  var title = data.title || 'DarajaPlus';
+  var options = {
+    body: data.body || 'Vous avez une nouvelle notification.',
+    icon: 'assets/icon-192.png',
+    badge: 'assets/icon-192.png',
+    tag: 'daraja-notification',
+    renotify: true,
+    data: { url: data.url || './#/notifications' }
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+/* Un clic sur l'alerte ouvre l'application sur la page des notifications. */
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  var target = new URL((event.notification.data && event.notification.data.url) || './#/notifications', self.registration.scope).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (list) {
+      for (var i = 0; i < list.length; i++) {
+        var c = list[i];
+        if (c.url.indexOf(self.registration.scope) === 0 && 'focus' in c) {
+          return c.focus().then(function (w) { return (w && w.navigate) ? w.navigate(target) : w; });
+        }
+      }
+      return self.clients.openWindow(target);
+    })
+  );
 });

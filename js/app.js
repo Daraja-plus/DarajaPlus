@@ -120,6 +120,7 @@
       await navigate();
     },
     async logout() {
+      await DP.push.forgetOnSignOut();
       await DP.api.signOut();
       this.profile = null;
       location.hash = '#/';
@@ -238,6 +239,7 @@
             DP.ui.field({ name: 'password', label: 'Nouveau mot de passe', type: 'password', required: true, hint: 'Au moins 6 caractères (8 recommandés).' }) +
             DP.ui.field({ name: 'confirm', label: 'Confirmer le mot de passe', type: 'password', required: true }) +
             '<div class="form-actions"><button class="btn btn-primary" type="submit">Changer le mot de passe</button></div></form>') +
+          DP.ui.card('Notifications sur ce téléphone', '<div id="push-box" aria-live="polite"><p class="small muted">Vérification de l’appareil…</p></div>') +
           '</div>';
         DP.ui.bindForm(el.querySelector('#f-profile'), async function (data) {
           await DP.api.update('profiles', { id: 'eq.' + DP.api.uid }, { nom: data.nom, postnom: data.postnom, prenom: data.prenom, phone: data.phone || null });
@@ -250,6 +252,9 @@
           await DP.api.updatePassword(data.password);
           return 'Mot de passe modifié.';
         });
+        var pushBox = el.querySelector('#push-box');
+        DP.push.bind(pushBox);
+        DP.push.render(pushBox);
       }
     }
   ]);
