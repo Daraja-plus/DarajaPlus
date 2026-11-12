@@ -80,6 +80,8 @@ img { max-width: 100%; }
 .btn-ghost { background: transparent; color: var(--ink-soft); }
 .btn-ghost:hover:not(:disabled) { background: var(--line); }
 .btn-danger { background: var(--bad); color: #fff; }
+.btn-orange { background: #ea580c; color: #fff; }
+.btn-orange:hover:not(:disabled) { background: #c2410c; }
 .btn-sm { min-height: 36px; padding: .35rem .7rem; font-size: .9rem; }
 .btn-block { width: 100%; }
 .btn-row { display: flex; gap: .5rem; flex-wrap: wrap; }

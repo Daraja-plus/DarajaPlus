@@ -166,7 +166,10 @@
       return '<button class="btn btn-sm btn-outline" type="button" data-review="' + esc(p.id) + '">Examiner</button> ' +
         '<button class="btn btn-sm btn-primary" type="button" data-quick-approve="' + esc(p.id) + '">Valider</button>';
     }
-    if (p.status === 'active') return '<button class="btn btn-sm btn-outline" type="button" data-suspend="' + esc(p.id) + '">Suspendre</button>';
+    if (p.status === 'active') {
+      return '<button class="btn btn-sm btn-danger" type="button" data-revoke="' + esc(p.id) + '">Révoquer</button> ' +
+        '<button class="btn btn-sm btn-orange" type="button" data-suspend="' + esc(p.id) + '">Suspendre</button>';
+    }
     if (p.status === 'suspended') return '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(p.id) + '">Réactiver</button>';
     return '—';
   }
@@ -187,7 +190,7 @@
         { label: 'E-mail', render: function (p) { return esc(p.email || '—'); } },
         { label: 'Téléphone', render: function (p) { return esc(p.phone || '—'); } },
         { label: 'Inscrit le', render: function (p) { return ui.date(p.created_at); } },
-        { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
+        { label: 'Statut', render: function (p) { return p.status === 'active' ? '<span class="badge badge-ok">Validé</span>' : ui.badge(p.status); } },
         { label: 'Validé le', render: function (p) { return p.validated_at ? ui.dateTime(p.validated_at) : '—'; } },
         { label: 'Motif de refus', render: function (p) { return esc(short(p.rejection_reason, 80) || '—'); } },
         { label: 'Action', cls: 'actions', render: actionsForAccount }
@@ -196,16 +199,15 @@
     act(el, '[data-review]', function (b) { return openReview(map[b.dataset.review], lk); });
     act(el, '[data-quick-approve]', async function (b) {
       var p = map[b.dataset.quickApprove];
-      /* Hôte et Agent : l'affectation (zone, Hôte) doit être choisie avant validation. Bénéficiaire : l'Agent est facultatif. */
-      if (p.role !== 'partner') {
-        ui.toast(p.role === 'beneficiary'
-          ? 'Vous pouvez affecter un Agent dans la fenêtre qui s’ouvre (facultatif), puis cliquez sur « Valider le compte ».'
-          : 'Pour cette personne, choisissez son affectation dans la fenêtre qui s’ouvre, puis cliquez sur « Valider le compte ».', 'ok');
+      /* Hôte et Agent : l'affectation (zone, Hôte) doit être choisie avant validation, la fenêtre s'ouvre.
+         Bénéficiaire (Agent facultatif) et partenaire : validation directe au clic. */
+      if (p.role === 'host' || p.role === 'agent') {
+        ui.toast('Choisissez l’affectation de cette personne dans la fenêtre qui s’ouvre, puis cliquez sur « Valider le compte ».', 'ok');
         return openReview(p, lk);
       }
-      if (!(await ui.confirm('Valider le compte de ' + pname(p) + ' ? Il aura accès à son espace. La décision de financement lui restera.', 'Valider'))) return;
       await DP.api.rpc('admin_review_account', { p_profile: p.id, p_decision: 'approve', p_reason: null, p_zone: null, p_host: null, p_agent: null, p_category: null, p_sponsor: null, p_quartier: null });
       await confirmValidated(p);
+      location.hash = '#/admin/comptes?statut=active';
       refresh();
     });
     act(el, '[data-suspend]', async function (b) {
@@ -219,6 +221,13 @@
       await DP.api.rpc('admin_review_account', { p_profile: b.dataset.reactivate, p_decision: 'reactivate', p_reason: null });
       ui.toast('Compte réactivé.', 'ok');
       refresh();
+    });
+    /* Révoquer un compte validé : il passe dans « Refusés », avec un motif visible par la personne. */
+    act(el, '[data-revoke]', function (b) {
+      var p = map[b.dataset.revoke];
+      return reasonModal('Révoquer le compte de ' + pname(p), 'Motif de la révocation (obligatoire, visible par la personne)', 'Révoquer', function (reason) {
+        return DP.api.rpc('admin_review_account', { p_profile: p.id, p_decision: 'reject', p_reason: reason });
+      });
     });
   }
 
@@ -328,6 +337,7 @@
       await DP.api.rpc('admin_review_account', payload);
       m.close();
       await confirmValidated(p);
+      location.hash = '#/admin/comptes?statut=active';
       refresh();
     });
   }
