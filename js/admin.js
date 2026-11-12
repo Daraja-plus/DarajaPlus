@@ -140,7 +140,7 @@
         ['Commissions simulées', ui.money(s.commissions_simulees_fc, 'FC'), 'Simulation : aucune créance exigible'],
         ['Visibilités à confirmer', s.visibilites_a_payer, 'En attente de paiement']
       ]) +
-      ui.card('Actions à traiter', '<div class="btn-row">' +
+      ui.card('Actions à traiter', '<div class="btn-row quick-links">' +
         '<a class="btn btn-primary" href="#/admin/comptes">Comptes à valider</a>' +
         '<a class="btn btn-outline" href="#/admin/ponts">Ponts à valider</a>' +
         '<a class="btn btn-outline" href="#/admin/resultats">Résultats à valider</a>' +

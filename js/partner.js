@@ -100,7 +100,7 @@
         ['Dossiers acceptés', accepted, 'Décisions positives'],
         ['Résultats déclarés', outs.length, 'En attente de vérification']
       ]) +
-      DP.ui.card('Accès rapides', '<div class="btn-row">' +
+      DP.ui.card('Accès rapides', '<div class="btn-row quick-links">' +
         '<a class="btn btn-primary" href="#/partenaire/recherche">Rechercher des projets</a>' +
         '<a class="btn btn-outline" href="#/partenaire/dossiers">Mes dossiers</a>' +
         '<a class="btn btn-outline" href="#/partenaire/offres">Mes offres</a>' +

@@ -120,7 +120,7 @@
         ['Pièces déposées', docs.length, 'Dans votre espace'],
         ['Carrefours', memb.filter(function (m) { return m.status === 'accepted'; }).length, 'Adhésions acceptées']
       ]) +
-      ui.card('Accès rapides', '<div class="btn-row">' +
+      ui.card('Accès rapides', '<div class="btn-row quick-links">' +
         '<a class="btn btn-primary" href="#/espace/categorie">Ma catégorie</a>' +
         '<a class="btn btn-outline" href="#/espace/entreprises">Mes entreprises</a>' +
         '<a class="btn btn-outline" href="#/espace/projets">Mes projets et besoins</a>' +

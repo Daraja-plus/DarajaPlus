@@ -272,7 +272,7 @@
   }
 
   function privateTopbar(profile, unread) {
-    return '<div class="topbar-inner"><a class="brand" href="' + esc(DP.app.homeFor(profile.role)) + '" aria-label="DarajaPlus, mon espace">' +
+    return '<div class="topbar-inner is-private"><a class="brand" href="' + esc(DP.app.homeFor(profile.role)) + '" aria-label="DarajaPlus, mon espace">' +
       '<img src="assets/logo-daraja.png" alt="" class="logo" width="40" height="40"><span>DarajaPlus</span></a>' +
       '<div class="topbar-actions">' +
       '<span class="who"><strong>' + esc(DP.app.displayName(profile)) + '</strong><span class="muted small">' +
@@ -283,15 +283,59 @@
       '</div></div>';
   }
 
-  function sideHtml(profile, unread) {
+  /* Liens du menu d'un rôle : utilisés par la colonne de gauche (ordinateur) et par le panneau Menu (téléphone). */
+  function navLinks(profile, unread) {
     var cur = location.hash.split('?')[0];
-    var items = (menus[profile.role] || []).map(function (m) {
+    return (menus[profile.role] || []).map(function (m) {
       var active = cur === m[1] || (m[1].split('/').length > 2 && cur.indexOf(m[1] + '/') === 0);
       var count = m[1] === '#/notifications' && unread ? ' <span class="count">' + (unread > 99 ? '99+' : unread) + '</span>' : '';
       return '<a href="' + m[1] + '"' + (active ? ' class="active" aria-current="page"' : '') + '>' + esc(m[0]) + count + '</a>';
     }).join('');
+  }
+
+  function sideHtml(profile, unread) {
     return '<aside class="sidebar" aria-label="Menu de l’espace"><div class="side-role">' + esc(DP.labels.role[profile.role]) +
-      '</div><nav class="side-nav">' + items + '</nav></aside>';
+      '</div><nav class="side-nav">' + navLinks(profile, unread) + '</nav></aside>';
+  }
+
+  /* Barre du bas (téléphone) : accueil, liste principale du rôle, notifications, compte, puis Menu complet. */
+  var tabs = {
+    admin: [['Accueil', '#/admin', '🏠'], ['Comptes', '#/admin/comptes', '👥']],
+    host: [['Zone', '#/hote', '🏠'], ['Agents', '#/hote/agents', '👥']],
+    agent: [['Accueil', '#/agent', '🏠'], ['Bénéficiaires', '#/agent/beneficiaires', '👥']],
+    beneficiary: [['Accueil', '#/espace', '🏠'], ['Dossiers', '#/espace/dossiers', '📂']],
+    partner: [['Accueil', '#/partenaire', '🏠'], ['Dossiers', '#/partenaire/dossiers', '📂']]
+  };
+
+  function tabbarHtml(profile, unread) {
+    var cur = location.hash.split('?')[0];
+    var list = (tabs[profile.role] || tabs.beneficiary).concat([['Notifications', '#/notifications', '🔔'], ['Mon compte', '#/mon-compte', '👤']]);
+    var links = list.map(function (t) {
+      var active = cur === t[1] || (t[1].split('/').length > 2 && cur.indexOf(t[1] + '/') === 0);
+      var count = t[1] === '#/notifications' && unread ? '<span class="count">' + (unread > 99 ? '99+' : unread) + '</span>' : '';
+      return '<a href="' + t[1] + '"' + (active ? ' aria-current="page"' : '') + '><span class="ico" aria-hidden="true">' + t[2] +
+        '</span><span class="lbl">' + esc(t[0]) + '</span>' + count + '</a>';
+    }).join('');
+    return '<nav class="tabbar" aria-label="Navigation rapide">' + links +
+      '<button type="button" data-menu-open aria-haspopup="dialog" aria-controls="menu-sheet"><span class="ico" aria-hidden="true">☰</span>' +
+      '<span class="lbl">Menu</span></button></nav>';
+  }
+
+  /* Panneau Menu (téléphone) : tous les liens du rôle, avec la déconnexion. */
+  function sheetHtml(profile, unread) {
+    return '<div class="sheet-backdrop" id="menu-sheet" hidden><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="menu-title">' +
+      '<div class="sheet-head"><h2 id="menu-title">Menu · ' + esc(DP.labels.role[profile.role]) + '</h2>' +
+      '<button type="button" class="btn btn-ghost btn-sm" data-menu-close>Fermer</button></div>' +
+      '<nav class="sheet-nav" aria-label="Menu de l’espace">' + navLinks(profile, unread) + '</nav>' +
+      '<div class="sheet-foot"><button type="button" class="btn btn-outline btn-block" data-logout>Déconnexion</button></div>' +
+      '</div></div>';
+  }
+
+  function showMenu(open) {
+    var s = document.getElementById('menu-sheet');
+    if (!s) return;
+    s.hidden = !open;
+    if (open) { var c = s.querySelector('[data-menu-close]'); if (c) c.focus(); }
   }
 
   function footerHtml() {
@@ -353,7 +397,8 @@
 
     if (priv) {
       topbar.innerHTML = privateTopbar(profile, unread);
-      app.innerHTML = '<div class="shell">' + sideHtml(profile, unread) + '<section class="view" id="view" tabindex="-1"></section></div>';
+      app.innerHTML = '<div class="shell">' + sideHtml(profile, unread) + '<section class="view" id="view" tabindex="-1"></section></div>' +
+        tabbarHtml(profile, unread) + sheetHtml(profile, unread);
     } else {
       topbar.innerHTML = publicTopbar();
       app.innerHTML = '<section class="view public-view" id="view" tabindex="-1"></section>' + footerHtml();
@@ -402,8 +447,11 @@
 
   document.addEventListener('click', function (e) {
     var b = e.target.closest && e.target.closest('[data-logout]');
-    if (b) { e.preventDefault(); DP.app.logout(); }
+    if (b) { e.preventDefault(); DP.app.logout(); return; }
+    if (e.target.closest && e.target.closest('[data-menu-open]')) { e.preventDefault(); showMenu(true); return; }
+    if (e.target.closest && (e.target.closest('[data-menu-close]') || e.target.closest('#menu-sheet a') || e.target.id === 'menu-sheet')) showMenu(false);
   });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') showMenu(false); });
 
   DP.navigate = navigate;
 

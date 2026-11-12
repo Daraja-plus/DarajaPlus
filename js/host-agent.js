@@ -118,7 +118,7 @@
         ['Ponts en cours', conns.filter(function (c) { return CONN_ACTIVE.indexOf(c.status) !== -1; }).length, 'Mises en relation suivies'],
         ['Carrefours', carrefours.length, 'Dans votre zone']
       ]) +
-      ui.card('Accès rapides', '<div class="btn-row">' +
+      ui.card('Accès rapides', '<div class="btn-row quick-links">' +
         '<a class="btn btn-primary" href="#/hote/beneficiaires">Vérifier les bénéficiaires</a>' +
         '<a class="btn btn-outline" href="#/hote/agents">Mes Agents</a>' +
         '<a class="btn btn-outline" href="#/hote/dossiers">Dossiers & projets</a>' +
@@ -282,7 +282,7 @@
         ['Total', q.total + ' / ' + caps.total, 'Bénéficiaires rattachés'],
         ['Publications gratuites', q.free_offers_used + ' / ' + q.free_offers_quota, 'Ce mois-ci']
       ]) +
-      ui.card('Accès rapides', '<div class="btn-row">' +
+      ui.card('Accès rapides', '<div class="btn-row quick-links">' +
         '<a class="btn btn-primary" href="#/agent/beneficiaires/nouveau">Enregistrer un bénéficiaire</a>' +
         '<a class="btn btn-outline" href="#/agent/beneficiaires">Mes bénéficiaires</a>' +
         '<a class="btn btn-outline" href="#/agent/categories">Catégories à proposer</a>' +
