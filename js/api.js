@@ -98,6 +98,18 @@
     return s ? '?' + s : '';
   }
 
+  /* ---- Fichiers : buckets privés « documents » (pièces) et « visuels » (photos, logos) ---- */
+  function uploadTo(bucket, path, file) {
+    return call('POST', base() + '/storage/v1/object/' + bucket + '/' + encodeURI(path), {
+      body: file, raw: true,
+      headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'false' }
+    });
+  }
+  async function signedUrlFor(bucket, path, seconds) {
+    var r = await call('POST', base() + '/storage/v1/object/sign/' + bucket + '/' + encodeURI(path), { body: { expiresIn: seconds || 300 } });
+    return base() + '/storage/v1' + r.signedURL;
+  }
+
   DP.api = {
     translate: translate,
     get session() { return session; },
@@ -154,15 +166,11 @@
     },
 
     /* ---- Pièces privées (bucket « documents ») ---- */
-    upload: function (path, file) {
-      return call('POST', base() + '/storage/v1/object/documents/' + encodeURI(path), {
-        body: file, raw: true,
-        headers: { 'Content-Type': file.type || 'application/octet-stream', 'x-upsert': 'false' }
-      });
-    },
-    signedUrl: async function (path, seconds) {
-      var r = await call('POST', base() + '/storage/v1/object/sign/documents/' + encodeURI(path), { body: { expiresIn: seconds || 300 } });
-      return base() + '/storage/v1' + r.signedURL;
-    }
+    upload: function (path, file) { return uploadTo('documents', path, file); },
+    signedUrl: function (path, seconds) { return signedUrlFor('documents', path, seconds); },
+
+    /* ---- Fichiers d'un bucket donné : « visuels » pour photos de profil et logos d'entreprise ---- */
+    uploadTo: uploadTo,
+    signedUrlFor: signedUrlFor
   };
 })();

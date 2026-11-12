@@ -29,13 +29,14 @@
       ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
     ],
     agent: [
-      ['Accueil', '#/agent'], ['Mes bénéficiaires', '#/agent/beneficiaires'], ['Nouveau bénéficiaire', '#/agent/beneficiaires/nouveau'],
+      ['Accueil', '#/agent'], ['Mes bénéficiaires', '#/agent/beneficiaires'], ['Catégories à proposer', '#/agent/categories'], ['Nouveau bénéficiaire', '#/agent/beneficiaires/nouveau'],
       ['Projets & besoins', '#/agent/projets'], ['Publications', '#/agent/offres'], ['Carrefours', '#/agent/carrefours'],
       ['Annonces', '#/agent/annonces'], ['Visibilité', '#/agent/visibilite'], ['Messages (Administrateur)', '#/messages'],
       ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
     ],
     beneficiary: [
-      ['Mon tableau de bord', '#/espace'], ['Mon profil', '#/espace/profil'], ['Mes projets & besoins', '#/espace/projets'],
+      ['Mon tableau de bord', '#/espace'], ['Ma catégorie', '#/espace/categorie'], ['Mon profil', '#/espace/profil'],
+      ['Mes entreprises', '#/espace/entreprises'], ['Mes projets & besoins', '#/espace/projets'],
       ['Mes dossiers', '#/espace/dossiers'], ['Opportunités', '#/espace/opportunites'], ['Carrefours', '#/espace/carrefours'],
       ['Visibilité', '#/espace/visibilite'], ['Messages (Administrateur)', '#/messages'],
       ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
@@ -368,15 +369,20 @@
     if (!DP.api.uid) return;
     var rows = [];
     try {
-      rows = await DP.api.get('notifications', { select: 'id,body', recipient_id: 'eq.' + DP.api.uid,
+      rows = await DP.api.get('notifications', { select: 'id,body,link', recipient_id: 'eq.' + DP.api.uid,
         kind: 'eq.compte_valide', read_at: 'is.null', order: 'created_at.desc', limit: 1 });
     } catch (e) { return; }
     if (token !== navToken || !rows.length) return;
     var n = rows[0];
     var box = document.createElement('div');
     box.className = 'validation-banner';
+    /* Le lien de la notification mène à la première étape (pour un bénéficiaire : le choix de catégorie). */
+    var next = n.link && n.link.indexOf('#/') === 0 ? n.link : '';
     box.innerHTML = DP.ui.alert('ok', '<strong>Votre compte est validé.</strong><br>' + esc(n.body) +
-      '<div class="btn-row"><button class="btn btn-sm btn-primary" type="button" data-ack-validation="' + esc(n.id) + '">J’ai compris</button></div>');
+      '<div class="btn-row">' +
+        (next ? '<a class="btn btn-sm btn-primary" href="' + esc(next) + '">' + (next === '#/espace/categorie' ? 'Choisir ma catégorie' : 'Continuer') + '</a>' : '') +
+        '<button class="btn btn-sm btn-outline" type="button" data-ack-validation="' + esc(n.id) + '">J’ai compris</button>' +
+      '</div>');
     view.insertBefore(box, view.firstChild);
     var btn = box.querySelector('[data-ack-validation]');
     btn.addEventListener('click', async function () {

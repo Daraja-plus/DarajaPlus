@@ -110,7 +110,7 @@ async function scenarioPending(browser) {
   check('la confirmation apparaît sans recharger la page', body.indexOf('Votre compte est validé') !== -1, body.replace(/\s+/g, ' ').slice(0, 110));
   check('la confirmation indique la date de validation', body.indexOf('Validé le') !== -1 && body.indexOf('2026') !== -1);
   const href = await page.locator('#view a.btn-primary').first().getAttribute('href').catch(function () { return null; });
-  check('le bouton « Commencer » mène à l’espace bénéficiaire', href === '#/espace', String(href));
+  check('le bouton « Commencer » mène au choix de catégorie', href === '#/espace/categorie', String(href));
   check('aucune erreur JavaScript', errors.length === 0, errors.join(' | '));
   await context.close();
 }

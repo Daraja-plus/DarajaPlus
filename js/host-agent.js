@@ -34,6 +34,12 @@
   function byId(rows) { var m = {}; (rows || []).forEach(function (r) { m[r.id] = r; }); return m; }
   function pname(p) { return p ? DP.app.displayName(p) : '—'; }
   function bname(b) { return b ? ([b.prenom, b.nom].filter(Boolean).join(' ') || b.code || '—') : '—'; }
+  /* Libellé d’un bénéficiaire dans les tableaux : « code — nom », ou seul le nom tant que le code n’existe pas. */
+  function bLabel(b) { return b ? (b.code ? b.code + ' — ' : '') + bname(b) : '—'; }
+  /* Catégorie d’un bénéficiaire, ou mention d’attente tant qu’aucune proposition n’est acceptée. */
+  function catHtml(cat) { return cat ? ui.categoryBadge(cat) : '<span class="muted small">En attente de catégorie</span>'; }
+  function catNom(c) { return DP.categories && DP.categories[c] ? DP.categories[c].nom : (DP.labels.category[c] || c || '—'); }
+  function placesLeft(n) { return n <= 0 ? 'Aucune place restante' : (n === 1 ? '1 place restante' : n + ' places restantes'); }
   function options(list, value, placeholder) {
     return (placeholder !== undefined ? '<option value="">' + esc(placeholder) + '</option>' : '') + list.map(function (o) {
       return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(value === null || value === undefined ? '' : value) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
@@ -129,7 +135,7 @@
     ]);
     var agents = r[0], bens = r[1], quart = byId(r[2]);
     var counts = {};
-    bens.forEach(function (b) { var c = counts[b.agent_id] || (counts[b.agent_id] = { bg: 0, bb: 0, ba: 0 }); c[b.category]++; });
+    bens.forEach(function (b) { var c = counts[b.agent_id] || (counts[b.agent_id] = { bg: 0, bb: 0, ba: 0 }); if (c[b.category] !== undefined) c[b.category]++; });
     el.innerHTML = ui.header('Mes Agents', agents.length + ' Agent(s) sur 10. Les Agents sont enregistrés et validés par l’Administrateur général.') +
       ui.card(null, ui.table([
         { label: 'Agent', render: function (a) { return '<strong>' + esc(pname(a)) + '</strong><div class="small muted">' + esc(a.code || '') + '</div>'; } },
@@ -150,13 +156,14 @@
     el.innerHTML = ui.header('Bénéficiaires de ma zone', 'Vérifiez les fiches transmises par les Agents, puis activez-les. Vous ne pouvez pas modifier le rattachement.') +
       ui.card(null, filterBar('#/hote/beneficiaires', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous (sauf archivés)']].concat(STATUS_BEN) }]) +
         ui.table([
-          { label: 'Code', render: function (b) { return '<strong>' + esc(b.code) + '</strong>'; } },
+          { label: 'Code', render: function (b) { return '<strong>' + esc(b.code || '—') + '</strong>'; } },
           { label: 'Bénéficiaire', render: function (b) { return esc(bname(b)); } },
-          { label: 'Catégorie', render: function (b) { return ui.categoryBadge(b.category); } },
+          { label: 'Catégorie', render: function (b) { return catHtml(b.category); } },
           { label: 'Agent', render: function (b) { return esc(pname(agents[b.agent_id])); } },
           { label: 'Statut', render: function (b) { return ui.badge(b.status); } },
           { label: 'Action', cls: 'actions', render: function (b) {
-            var quick = b.status === 'to_verify' || b.status === 'incomplete' || b.status === 'draft'
+            /* Une fiche « draft » n'a pas encore de catégorie : elle s'active par le choix accepté, pas ici. */
+            var quick = (b.status === 'to_verify' || b.status === 'incomplete') && b.category
               ? '<button class="btn btn-sm btn-primary" type="button" data-activate="' + esc(b.id) + '">Activer</button> ' : '';
             return quick + '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(b.id) + '">Statut</button>';
           } }
@@ -164,14 +171,14 @@
     bindFilters(el);
     act(el, '[data-activate]', async function (b) {
       var x = map[b.dataset.activate];
-      if (!(await ui.confirm('Activer ' + bname(x) + ' (' + x.code + ') ? La fiche sera considérée comme vérifiée.', 'Activer'))) return;
+      if (!(await ui.confirm('Activer ' + bname(x) + (x.code ? ' (' + x.code + ')' : '') + ' ? La fiche sera considérée comme vérifiée.', 'Activer'))) return;
       await DP.api.update('beneficiaries', { id: 'eq.' + x.id }, { status: 'active' });
       ui.toast('Bénéficiaire activé.', 'ok');
       refresh();
     });
     act(el, '[data-status]', function (b) {
       var x = map[b.dataset.status];
-      statusModal('Statut de ' + x.code, x.status, STATUS_BEN, function (status) {
+      statusModal('Statut de ' + (x.code || bname(x)), x.status, STATUS_BEN, function (status) {
         return DP.api.update('beneficiaries', { id: 'eq.' + x.id }, { status: status });
       });
     });
@@ -188,7 +195,7 @@
       ui.card(null, filterBar('#/hote/dossiers', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(STATUS_PROJ) }]) +
         ui.table([
           { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
-          { label: 'Bénéficiaire', render: function (p) { var b = bens[p.beneficiary_id]; return esc(b ? b.code + ' — ' + bname(b) : '—'); } },
+          { label: 'Bénéficiaire', render: function (p) { return esc(bLabel(bens[p.beneficiary_id])); } },
           { label: 'Montant', cls: 'num', render: function (p) { return ui.money(p.amount, p.currency); } },
           { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
           { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(p.id) + '">Statut</button>'; } }
@@ -210,7 +217,7 @@
     el.innerHTML = ui.header('Ponts — mises en relation', 'Suivi en lecture seule des demandes concernant votre zone. Les décisions appartiennent à l’Administrateur, au bénéficiaire et au partenaire.') +
       ui.card(null, ui.table([
         { label: 'Projet', render: function (c) { var p = projects[c.project_id]; return '<strong>' + esc(p ? p.title : '—') + '</strong>'; } },
-        { label: 'Bénéficiaire', render: function (c) { var p = projects[c.project_id]; var b = p ? bens[p.beneficiary_id] : null; return esc(b ? b.code + ' — ' + bname(b) : '—'); } },
+        { label: 'Bénéficiaire', render: function (c) { var p = projects[c.project_id]; return esc(bLabel(p ? bens[p.beneficiary_id] : null)); } },
         { label: 'Partenaire', render: function (c) { var x = partners[c.partner_id]; return esc(x ? x.legal_name : '—'); } },
         { label: 'Statut', render: function (c) { return ui.badge(c.status); } },
         { label: 'Demandé le', render: function (c) { return ui.date(c.created_at); } }
@@ -278,6 +285,7 @@
       ui.card('Accès rapides', '<div class="btn-row">' +
         '<a class="btn btn-primary" href="#/agent/beneficiaires/nouveau">Enregistrer un bénéficiaire</a>' +
         '<a class="btn btn-outline" href="#/agent/beneficiaires">Mes bénéficiaires</a>' +
+        '<a class="btn btn-outline" href="#/agent/categories">Catégories à proposer</a>' +
         '<a class="btn btn-outline" href="#/agent/projets">Dossiers & besoins</a>' +
         '<a class="btn btn-outline" href="#/agent/carrefours">Carrefours</a>' +
         '<a class="btn btn-outline" href="#/agent/offres">Publier une offre</a></div>') +
@@ -294,9 +302,9 @@
         '<a class="btn btn-primary" href="#/agent/beneficiaires/nouveau">+ Nouveau bénéficiaire</a>') +
       ui.card(null, filterBar('#/agent/beneficiaires', [{ name: 'categorie', label: 'Catégorie', value: cat, options: [['', 'Toutes']].concat(CAT) }]) +
         ui.table([
-          { label: 'Code', render: function (b) { return '<strong>' + esc(b.code) + '</strong>'; } },
+          { label: 'Code', render: function (b) { return '<strong>' + esc(b.code || '—') + '</strong>'; } },
           { label: 'Bénéficiaire', render: function (b) { return esc(bname(b)); } },
-          { label: 'Catégorie', render: function (b) { return ui.categoryBadge(b.category); } },
+          { label: 'Catégorie', render: function (b) { return catHtml(b.category); } },
           { label: 'Téléphone', render: function (b) { return esc(b.phone || '—'); } },
           { label: 'Statut', render: function (b) { return ui.badge(b.status); } },
           { label: 'Action', cls: 'actions', render: function (b) { return '<a class="btn btn-sm btn-outline" href="#/agent/beneficiaires/' + esc(b.id) + '">Ouvrir</a>'; } }
@@ -335,7 +343,7 @@
       var need = cat === 'bb' ? 'bg' : (cat === 'ba' ? 'bb' : null);
       F.sponsor.disabled = !need;
       F.sponsor.innerHTML = options(need ? sponsors.filter(function (s) { return s.category === need; }).map(function (s) {
-        return [s.id, s.code + ' — ' + bname(s)];
+        return [s.id, bLabel(s)];
       }) : [], '', need ? 'Choisir un parrain' : 'Non applicable pour un Bg');
     };
     F.category.addEventListener('change', refreshSponsor);
@@ -366,7 +374,7 @@
     ]);
     var projects = r[0], docs = r[1], quartiers = r[2];
     var editableStatus = STATUS_BEN_AGENT.some(function (s) { return s[0] === b.status; });
-    el.innerHTML = ui.header(bname(b), b.code + ' · ' + (DP.labels.category[b.category] || b.category),
+    el.innerHTML = ui.header(bname(b), (b.code ? b.code + ' · ' : '') + (b.category ? (DP.labels.category[b.category] || b.category) : 'En attente de catégorie'),
         '<a class="btn btn-outline" href="#/agent/beneficiaires">← Mes bénéficiaires</a>') +
       '<div class="grid-2">' +
       ui.card('Fiche', '<form class="form" id="f-ben">' +
@@ -435,7 +443,7 @@
       ui.card(null, filterBar('#/agent/projets', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(STATUS_PROJ) }]) +
         ui.table([
           { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
-          { label: 'Bénéficiaire', render: function (p) { var b = bens[p.beneficiary_id]; return '<a href="#/agent/beneficiaires/' + esc(p.beneficiary_id) + '">' + esc(b ? b.code + ' — ' + bname(b) : '—') + '</a>'; } },
+          { label: 'Bénéficiaire', render: function (p) { return '<a href="#/agent/beneficiaires/' + esc(p.beneficiary_id) + '">' + esc(bLabel(bens[p.beneficiary_id])) + '</a>'; } },
           { label: 'Montant', cls: 'num', render: function (p) { return ui.money(p.amount, p.currency); } },
           { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
           { label: 'Action', cls: 'actions', render: function (p) {
@@ -614,6 +622,101 @@
     });
   }
 
+  /* ---------- Propositions de catégorie (Agent) ---------- */
+  async function renderAgentCategories(el) {
+    var board = (await DP.api.rpc('agent_category_board', {})) || {};
+    var quota = board.quota || {};
+    var waiting = board.waiting || [];
+    var sponsors = board.sponsors || [];
+    var q = function (c) { return quota[c] || { total: 0, taken: 0, left: 0 }; };
+    var byBen = {};
+    waiting.forEach(function (w) { byBen[w.beneficiary_id] = w; });
+
+    var columns = [
+      { label: 'Identifiant', render: function (w) { return '<strong>' + esc(w.identifiant || '—') + '</strong>'; } },
+      { label: 'Bénéficiaire', render: function (w) { return esc(bname(w)); } },
+      { label: 'Téléphone', render: function (w) { return esc(w.phone || '—'); } },
+      { label: 'Souhait', render: function (w) { return esc(DP.labels.category[w.wish] || '—'); } },
+      { label: 'Souhait exprimé le', render: function (w) { return ui.date(w.wish_at); } },
+      { label: 'Proposition', render: function (w) {
+        return w.proposal
+          ? '<span class="small">' + esc(catNom(w.proposal.category) + ', en attente de sa réponse') + '</span>'
+          : '<span class="muted small">Aucune</span>';
+      } },
+      { label: 'Action', cls: 'actions', render: function (w) {
+        return '<button class="btn btn-sm btn-primary" type="button" data-propose="' + esc(w.beneficiary_id) + '">Proposer une catégorie</button>';
+      } }
+    ];
+
+    el.innerHTML = ui.header('Catégories à proposer', 'Proposez une catégorie aux bénéficiaires qui vous sont rattachés. Ils acceptent ou refusent. Le code n’est donné qu’à l’acceptation.') +
+      ui.stats(CAT.map(function (c) {
+        var x = q(c[0]);
+        return [catNom(c[0]), x.taken + ' / ' + x.total, placesLeft(x.left), x.left <= 0 ? 'warn' : ''];
+      })) +
+      ui.alert('info', 'Un Bêta a pour parrain un Gamma de votre Agent. Un Alpha a pour parrain un Bêta de votre Agent. Un Gamma n’a pas de parrain.') +
+      ui.card('Bénéficiaires en attente de catégorie', ui.table(columns, waiting, 'Aucun bénéficiaire en attente de catégorie.'));
+
+    act(el, '[data-propose]', function (btn) {
+      var w = byBen[btn.dataset.propose];
+      if (!w) return;
+      var m = ui.modal('Proposer une catégorie — ' + bname(w),
+        '<form class="form" id="f-cat">' +
+        '<p class="small muted">Le bénéficiaire reçoit cette proposition. Il l’accepte ou la refuse.</p>' +
+        '<div class="field field-full"><label for="cp-cat">Catégorie</label><select class="input" id="cp-cat" name="category"></select></div>' +
+        '<div class="field field-full" id="cp-sponsor-wrap"><label for="cp-sponsor">Parrain</label><select class="input" id="cp-sponsor" name="sponsor"></select></div>' +
+        '<p class="small" id="cp-rank"></p>' +
+        '<div class="form-actions"><button class="btn btn-primary" type="submit">Envoyer la proposition</button></div></form>');
+      var form = m.el.querySelector('#f-cat');
+      var selCat = form.elements.category;
+      var selSponsor = form.elements.sponsor;
+      var wrap = m.el.querySelector('#cp-sponsor-wrap');
+      var rank = m.el.querySelector('#cp-rank');
+      var submit = form.querySelector('[type=submit]');
+
+      /* Pré-sélection : le souhait du bénéficiaire, sinon la première catégorie encore ouverte. */
+      var firstOpen = (CAT.filter(function (c) { return q(c[0]).left > 0; })[0] || [''])[0];
+      var pre = w.wish && q(w.wish).left > 0 ? w.wish : firstOpen;
+      selCat.innerHTML = CAT.map(function (c) {
+        var full = q(c[0]).left <= 0;
+        return '<option value="' + c[0] + '"' + (c[0] === pre ? ' selected' : '') + (full ? ' disabled' : '') + '>' +
+          esc(c[1]) + (full ? ' (complet)' : '') + '</option>';
+      }).join('');
+
+      /* Parrain requis pour Bêta (parrain Gamma) et Alpha (parrain Bêta) ; aucun pour Gamma. */
+      var refreshForm = function () {
+        var cat = selCat.value;
+        var x = q(cat);
+        var need = cat === 'bb' ? 'bg' : (cat === 'ba' ? 'bb' : null);
+        wrap.style.display = need ? '' : 'none';
+        selSponsor.disabled = !need;
+        selSponsor.innerHTML = need
+          ? '<option value="">Choisissez un parrain</option>' + sponsors.filter(function (s) { return s.category === need; }).map(function (s) {
+            var full = s.children >= s.max;
+            return '<option value="' + esc(s.id) + '"' + (full ? ' disabled' : '') + '>' +
+              esc((s.code || '—') + ' — ' + bname(s) + ' (filleuls : ' + s.children + '/' + s.max + ')') + '</option>';
+          }).join('')
+          : '';
+        rank.innerHTML = x.left > 0
+          ? 'Rang prévu : <strong>' + (x.taken + 1) + '</strong> sur ' + x.total + ' places (indicatif).'
+          : 'Aucune place disponible dans cette catégorie.';
+        submit.disabled = !(x.left > 0);
+      };
+      selCat.addEventListener('change', refreshForm);
+      refreshForm();
+
+      ui.bindForm(form, async function (d) {
+        var cat = d.category;
+        if (!cat || !(q(cat).left > 0)) throw new Error('Cette catégorie n’a plus de place pour votre quota.');
+        var sponsor = cat === 'bg' ? null : (d.sponsor || null);
+        if (cat !== 'bg' && !sponsor) throw new Error('Choisissez le parrain pour ce bénéficiaire.');
+        await DP.api.rpc('agent_propose_category', { p_beneficiary: w.beneficiary_id, p_category: cat, p_sponsor: sponsor });
+        m.close();
+        refresh();
+        return 'Proposition envoyée. Le bénéficiaire doit l’accepter ou la refuser.';
+      });
+    });
+  }
+
   /* ---------- Routes ---------- */
   DP.register([
     { path: '/hote', roles: HOST, title: 'Tableau de zone', render: renderHostHome },
@@ -629,6 +732,7 @@
     /* « nouveau » doit être enregistré avant « :id » pour ne pas être lu comme un identifiant. */
     { path: '/agent/beneficiaires/nouveau', roles: AGENT, title: 'Nouveau bénéficiaire', render: renderAgentNewBeneficiary },
     { path: '/agent/beneficiaires/:id', roles: AGENT, title: 'Fiche bénéficiaire', render: renderAgentBeneficiary },
+    { path: '/agent/categories', roles: AGENT, title: 'Catégories à proposer', render: renderAgentCategories },
     { path: '/agent/projets', roles: AGENT, title: 'Dossiers et besoins', render: renderAgentProjects },
     { path: '/agent/offres', roles: AGENT, title: 'Publications', render: renderAgentOffers },
     { path: '/agent/carrefours', roles: AGENT, title: 'Mes Carrefours', render: renderAgentCarrefours },

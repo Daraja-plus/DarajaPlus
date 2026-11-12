@@ -512,7 +512,7 @@
       el.innerHTML = head0 +
         DP.ui.alert('ok', '<strong>Votre compte est validé.</strong>' + when +
           '<br>Vous pouvez commencer dès maintenant.') +
-        '<div class="btn-row"><a class="btn btn-primary" href="' + DP.ui.esc(DP.app.homeFor(fresh.role)) + '">Commencer</a></div>';
+        '<div class="btn-row"><a class="btn btn-primary" href="' + DP.ui.esc(fresh.role === 'beneficiary' ? '#/espace/categorie' : DP.app.homeFor(fresh.role)) + '">Commencer</a></div>';
     }, 15000);
   }
 })();

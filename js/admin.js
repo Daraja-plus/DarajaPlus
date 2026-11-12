@@ -35,6 +35,13 @@
   function byId(rows) { var m = {}; (rows || []).forEach(function (r) { m[r.id] = r; }); return m; }
   function pname(p) { return p ? DP.app.displayName(p) : '—'; }
   function bname(b) { return b ? ([b.prenom, b.nom].filter(Boolean).join(' ') || b.code || '—') : '—'; }
+  /* Code d’un bénéficiaire : vide tant que le dossier est en brouillon (pas de catégorie validée). */
+  function bcode(b) { return b && b.code ? b.code : '—'; }
+  /* Nom d’un bénéficiaire ; à défaut, nom du compte lié (cas d’un brouillon sans nom saisi). */
+  function benName(b, users) { var n = bname(b); return n !== '—' ? n : pname(users ? users[b.user_id] : null); }
+  /* Statut d’un dossier : un brouillon attend la catégorie choisie par le bénéficiaire. */
+  function benStatus(b) { return b.status === 'draft' ? '<span class="badge badge-warn">En attente de catégorie</span>' : ui.badge(b.status); }
+  var BEN_STATUS_FILTER = STATUS_BEN.map(function (s) { return s[0] === 'draft' ? ['draft', 'En attente de catégorie'] : s; });
   function options(list, value, placeholder) {
     return (placeholder !== undefined ? '<option value="">' + esc(placeholder) + '</option>' : '') + list.map(function (o) {
       return '<option value="' + esc(o[0]) + '"' + (String(o[0]) === String(value === null || value === undefined ? '' : value) ? ' selected' : '') + '>' + esc(o[1]) + '</option>';
@@ -87,22 +94,26 @@
     }, null);
   }
 
-  /* Données de référence : zones, quartiers, Hôtes, Agents actifs, Bg/Bb (parrains). */
+  /* Données de référence : zones, quartiers, Hôtes, Agents actifs. */
   async function lookups() {
     var r = await Promise.all([
       DP.api.get('zones', { select: '*', order: 'id.asc' }),
       DP.api.get('quartiers', { select: '*', order: 'zone_id.asc,id.asc' }),
       DP.api.get('profiles', { select: 'id,role,status,zone_id,host_id,code,prenom,nom,email', role: 'eq.host', order: 'zone_id.asc' }),
-      DP.api.get('profiles', { select: 'id,role,status,zone_id,host_id,code,prenom,nom,email,quartier_id', role: 'eq.agent', status: 'eq.active', order: 'code.asc' }),
-      DP.api.get('beneficiaries', { select: 'id,code,category,agent_id,prenom,nom,status', category: 'in.(bg,bb)', status: 'neq.archived', order: 'code.asc' })
+      DP.api.get('profiles', { select: 'id,role,status,zone_id,host_id,code,prenom,nom,email,quartier_id', role: 'eq.agent', status: 'eq.active', order: 'code.asc' })
     ]);
-    return { zones: r[0], quartiers: r[1], hosts: r[2], agents: r[3], sponsors: r[4] };
+    return { zones: r[0], quartiers: r[1], hosts: r[2], agents: r[3] };
+  }
+
+  /* Quartiers d’une zone (liste pour les menus déroulants). */
+  function quartiersOfZone(lk, zoneId) {
+    return lk.quartiers.filter(function (q) { return String(q.zone_id) === String(zoneId); }).map(function (q) { return [q.id, q.name]; });
   }
 
   /* Noms des profils liés à une liste d’identifiants (sans jointure PostgREST). */
   async function profilesFor(ids) {
     var q = inq(ids);
-    return q ? byId(await DP.api.get('profiles', { select: 'id,role,status,code,prenom,nom,email,host_id,zone_id,quartier_id', id: q })) : {};
+    return q ? byId(await DP.api.get('profiles', { select: 'id,role,status,code,prenom,nom,email,host_id,zone_id,quartier_id,identifiant', id: q })) : {};
   }
   async function beneficiariesFor(ids) {
     var q = inq(ids);
@@ -141,12 +152,13 @@
   /* ---------- Comptes ---------- */
   /* Confirmation après validation : la date et l’heure exactes sont relues en base. */
   async function confirmValidated(p) {
-    var when = '';
+    var when = '', ident = '';
     try {
-      var r = await DP.api.get('profiles', { select: 'validated_at', id: 'eq.' + p.id });
+      var r = await DP.api.get('profiles', { select: 'validated_at,identifiant', id: 'eq.' + p.id });
       if (r[0] && r[0].validated_at) when = ' le ' + ui.dateTime(r[0].validated_at);
-    } catch (e) { /* l’heure reste facultative dans la confirmation */ }
-    ui.toast('Compte de ' + pname(p) + ' validé' + when + '. La personne est prévenue sur son compte.', 'ok');
+      if (r[0] && r[0].identifiant) ident = ' Identifiant : ' + r[0].identifiant + '.';
+    } catch (e) { /* l’heure et l’identifiant restent facultatifs dans la confirmation */ }
+    ui.toast('Compte de ' + pname(p) + ' validé' + when + '.' + ident + ' La personne est prévenue sur son compte.', 'ok');
   }
 
   function actionsForAccount(p) {
@@ -170,7 +182,7 @@
         return '<a class="tab' + (t[0] === filter ? ' active' : '') + '" href="#/admin/comptes?statut=' + t[0] + '">' + esc(t[1]) + '</a>';
       }).join('') + '</div>' +
       ui.card(null, ui.table([
-        { label: 'Nom', render: function (p) { return '<strong>' + esc(pname(p)) + '</strong>' + (p.code ? '<div class="small muted">' + esc(p.code) + '</div>' : ''); } },
+        { label: 'Nom', render: function (p) { return '<strong>' + esc(pname(p)) + '</strong>' + (p.identifiant ? ' <span class="small muted">' + esc(p.identifiant) + '</span>' : '') + (p.code ? '<div class="small muted">' + esc(p.code) + '</div>' : ''); } },
         { label: 'Rôle', render: function (p) { return esc(DP.labels.role[p.role] || p.role); } },
         { label: 'E-mail', render: function (p) { return esc(p.email || '—'); } },
         { label: 'Téléphone', render: function (p) { return esc(p.phone || '—'); } },
@@ -184,9 +196,11 @@
     act(el, '[data-review]', function (b) { return openReview(map[b.dataset.review], lk); });
     act(el, '[data-quick-approve]', async function (b) {
       var p = map[b.dataset.quickApprove];
-      /* Hôte, Agent et Bénéficiaire : l'affectation (zone, Hôte, Agent, catégorie) doit être choisie avant validation. */
+      /* Hôte et Agent : l'affectation (zone, Hôte) doit être choisie avant validation. Bénéficiaire : l'Agent est facultatif. */
       if (p.role !== 'partner') {
-        ui.toast('Pour cette personne, choisissez son affectation dans la fenêtre qui s’ouvre, puis cliquez sur « Valider le compte ».', 'ok');
+        ui.toast(p.role === 'beneficiary'
+          ? 'Vous pouvez affecter un Agent dans la fenêtre qui s’ouvre (facultatif), puis cliquez sur « Valider le compte ».'
+          : 'Pour cette personne, choisissez son affectation dans la fenêtre qui s’ouvre, puis cliquez sur « Valider le compte ».', 'ok');
         return openReview(p, lk);
       }
       if (!(await ui.confirm('Valider le compte de ' + pname(p) + ' ? Il aura accès à son espace. La décision de financement lui restera.', 'Valider'))) return;
@@ -215,14 +229,14 @@
     if (p.role === 'partner') partner = (await DP.api.get('partners', { select: '*', profile_id: 'eq.' + p.id }))[0] || null;
     var zmap = byId(lk.zones);
     function zoneName(id) { return zmap[id] ? zmap[id].name : '—'; }
-    function quartierOpts(zoneId) {
-      return lk.quartiers.filter(function (q) { return String(q.zone_id) === String(zoneId); }).map(function (q) { return [q.id, q.name]; });
-    }
+    function quartierOpts(zoneId) { return quartiersOfZone(lk, zoneId); }
 
     var info = '<dl class="kv"><dt>Nom</dt><dd>' + esc(pname(p)) + '</dd>' +
       '<dt>Rôle demandé</dt><dd>' + esc(DP.labels.role[p.role]) + '</dd>' +
       '<dt>E-mail</dt><dd>' + esc(p.email || '—') + '</dd>' +
       '<dt>Téléphone</dt><dd>' + esc(p.phone || '—') + '</dd>' +
+      (p.role === 'beneficiary' ? '<dt>Identifiant</dt><dd>' + esc(p.identifiant || 'Attribué à la validation') + '</dd>' +
+        '<dt>Catégorie souhaitée</dt><dd>' + esc(p.wish_category ? DP.labels.category[p.wish_category] : 'Non indiquée') + '</dd>' : '') +
       (partner ? '<dt>Organisation</dt><dd>' + esc(partner.legal_name) + '</dd>' +
         '<dt>Catégorie</dt><dd>' + esc(DP.labels.partnerCategory[partner.category] || partner.category) + '</dd>' +
         '<dt>Zones</dt><dd>' + esc(partner.geography || '—') + '</dd>' +
@@ -246,21 +260,19 @@
         ui.field({ name: 'quartier', label: 'Quartier de rattachement', type: 'select', options: [], placeholder: 'Choisir l’Hôte d’abord', dataType: 'nullable',
           hint: 'Facultatif. Les quartiers proposés sont ceux de la zone de l’Hôte.' });
     } else if (p.role === 'beneficiary') {
-      body = ui.field({ name: 'category', label: 'Catégorie', type: 'select', options: CAT, placeholder: 'Choisir', required: true, dataType: 'nullable' }) +
-        ui.field({ name: 'agent', label: 'Agent de rattachement', type: 'select', options: lk.agents.map(function (a) {
+      /* Pas de catégorie ni de parrain ici : le bénéficiaire choisit sa catégorie dans son espace après validation. */
+      body = ui.alert('info', '<strong>Après validation</strong>, le bénéficiaire reçoit son identifiant et choisit lui-même sa catégorie dans son espace. ' +
+        'Vous pouvez aussi lui affecter un Agent maintenant ou plus tard.') +
+        ui.field({ name: 'agent', label: 'Agent (facultatif : l’affectation peut se faire plus tard)', type: 'select', options: lk.agents.map(function (a) {
           return [a.id, pname(a) + ' (' + (a.code || '') + ') — ' + zoneName(a.zone_id)];
-        }), placeholder: 'Choisir un Agent actif', required: true, dataType: 'nullable' }) +
-        ui.field({ name: 'sponsor', label: 'Parrain', type: 'select', options: [], placeholder: 'Choisir la catégorie et l’Agent', dataType: 'nullable',
-          hint: 'Obligatoire pour un Bb (parrain Bg) et pour un Ba (parrain Bb). Non applicable pour un Bg.' }) +
-        ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: [], placeholder: 'Choisir l’Agent d’abord', dataType: 'nullable' });
+        }), placeholder: 'Aucun Agent pour le moment', dataType: 'nullable' }) +
+        (lk.quartiers.length ? ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: [], placeholder: 'Choisir l’Agent d’abord', dataType: 'nullable',
+          hint: 'Facultatif. Proposé seulement avec un Agent.' }) : '');
     } else {
       body = '<p class="small muted">Compte partenaire : vérifiez l’organisation puis validez. La décision de financement reste au partenaire.</p>';
     }
 
-    /* Sans Hôte actif ni Agent actif, un Agent ou un Bénéficiaire ne peut pas être rattaché : on le dit clairement. */
-    if (p.role === 'beneficiary' && !lk.agents.length) {
-      body = ui.alert('warn', '<strong>Aucun Agent actif pour le moment.</strong> Un bénéficiaire est rattaché à un Agent : validez d’abord un Hôte, puis un Agent, avant ce bénéficiaire.') + body;
-    }
+    /* Sans Hôte actif, un Agent ne peut pas être rattaché : on le dit clairement. */
     if (p.role === 'agent' && !lk.hosts.some(function (h) { return h.status === 'active'; })) {
       body = ui.alert('warn', '<strong>Aucun Hôte actif pour le moment.</strong> Un Agent est rattaché à un Hôte : validez d’abord l’Hôte de sa zone.') + body;
     }
@@ -278,23 +290,14 @@
         F.quartier.innerHTML = options(quartierOpts(h && h.zone_id), '', 'Aucun quartier précis');
       });
     }
-    if (p.role === 'beneficiary' && F.category) {
-      var sponsorOpts = function () {
-        var cat = F.category.value;
-        var need = cat === 'bb' ? 'bg' : (cat === 'ba' ? 'bb' : null);
-        F.sponsor.disabled = !need;
-        if (!need) return [];
-        return lk.sponsors.filter(function (s) { return s.category === need && String(s.agent_id) === F.agent.value; })
-          .map(function (s) { return [s.id, s.code + ' — ' + bname(s)]; });
-      };
-      var refreshSponsor = function () { F.sponsor.innerHTML = options(sponsorOpts(), '', 'Choisir un parrain'); };
+    if (p.role === 'beneficiary' && F.agent && F.quartier) {
+      /* Le quartier ne se choisit qu’avec un Agent : il suit la zone de l’Agent. */
       var refreshQuartier = function () {
         var a = lk.agents.find(function (x) { return String(x.id) === F.agent.value; });
-        F.quartier.innerHTML = options(quartierOpts(a && a.zone_id), '', 'Aucun quartier précis');
+        F.quartier.disabled = !a;
+        F.quartier.innerHTML = a ? options(quartierOpts(a.zone_id), '', 'Aucun quartier précis') : options([], '', 'Choisir l’Agent d’abord');
       };
-      F.category.addEventListener('change', refreshSponsor);
-      F.agent.addEventListener('change', function () { refreshSponsor(); refreshQuartier(); });
-      refreshSponsor();
+      F.agent.addEventListener('change', refreshQuartier);
       refreshQuartier();
     }
 
@@ -318,11 +321,9 @@
         payload.p_host = d.host;
         if (d.quartier) payload.p_quartier = Number(d.quartier);
       } else if (p.role === 'beneficiary') {
-        if (!d.category || !d.agent) throw new Error('La catégorie et l’Agent sont obligatoires.');
-        payload.p_category = d.category;
-        payload.p_agent = d.agent;
-        payload.p_sponsor = d.sponsor || null;
-        if (d.quartier) payload.p_quartier = Number(d.quartier);
+        /* Agent facultatif ; catégorie et parrain toujours null (choisis par le bénéficiaire après validation). */
+        payload.p_agent = d.agent || null;
+        payload.p_quartier = d.agent && d.quartier ? Number(d.quartier) : null;
       }
       await DP.api.rpc('admin_review_account', payload);
       m.close();
@@ -385,8 +386,10 @@
     var agents = r[0], hosts = byId(r[1]), zones = byId(r[2]), quart = byId(r[3]), bens = r[4];
     var counts = {};
     bens.forEach(function (b) {
+      /* Un brouillon (sans Agent ou sans catégorie) n’est compté nulle part. */
+      if (!b.agent_id || !b.category) return;
       var c = counts[b.agent_id] || (counts[b.agent_id] = { bg: 0, bb: 0, ba: 0 });
-      c[b.category]++;
+      if (c[b.category] !== undefined) c[b.category]++;
     });
     var map = byId(agents);
     el.innerHTML = ui.header('Agents', 'Un Agent gère au maximum 100 bénéficiaires : 10 Bg, 30 Bb et 60 Ba.') +
@@ -428,28 +431,71 @@
     if (cat) params.category = 'eq.' + cat;
     if (st) params.status = 'eq.' + st;
     var rows = await DP.api.get('beneficiaries', params);
-    var pr = await profilesFor(rows.map(function (b) { return b.agent_id; }).concat(rows.map(function (b) { return b.host_id; })));
+    /* Agents, Hôtes et comptes liés (identifiant) : une seule requête de profils. */
+    var pr = await profilesFor(rows.map(function (b) { return b.agent_id; })
+      .concat(rows.map(function (b) { return b.host_id; }), rows.map(function (b) { return b.user_id; })));
     var map = byId(rows);
     el.innerHTML = ui.header('Bénéficiaires', rows.length + ' bénéficiaire(s) affiché(s). Création par les Agents ; activation par l’Hôte ou l’Administrateur.') +
       ui.card(null, filterBar('#/admin/beneficiaires', [
         { name: 'categorie', label: 'Catégorie', value: cat, options: [['', 'Toutes']].concat(CAT) },
-        { name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(STATUS_BEN) }
+        { name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(BEN_STATUS_FILTER) }
       ]) + ui.table([
-        { label: 'Code', render: function (b) { return '<strong>' + esc(b.code) + '</strong>'; } },
-        { label: 'Bénéficiaire', render: function (b) { return esc(bname(b)); } },
+        { label: 'Code', render: function (b) { return '<strong>' + esc(bcode(b)) + '</strong>'; } },
+        { label: 'Identifiant', render: function (b) { return esc((pr[b.user_id] || {}).identifiant || '—'); } },
+        { label: 'Bénéficiaire', render: function (b) { return esc(benName(b, pr)); } },
         { label: 'Catégorie', render: function (b) { return ui.categoryBadge(b.category); } },
         { label: 'Agent', render: function (b) { return esc(pname(pr[b.agent_id])); } },
         { label: 'Hôte', render: function (b) { return esc(pname(pr[b.host_id])); } },
-        { label: 'Statut', render: function (b) { return ui.badge(b.status); } },
-        { label: 'Action', cls: 'actions', render: function (b) { return '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(b.id) + '">Statut</button>'; } }
+        { label: 'Statut', render: function (b) { return benStatus(b); } },
+        { label: 'Action', cls: 'actions', render: function (b) {
+          /* Un brouillon sans Agent peut recevoir un Agent ; le bouton disparaît ensuite. */
+          var assign = b.status === 'draft' && b.user_id ? '<button class="btn btn-sm btn-primary" type="button" data-assign="' + esc(b.user_id) + '">Affecter un Agent</button> ' : '';
+          return assign + '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(b.id) + '">Statut</button>';
+        } }
       ], rows, 'Aucun bénéficiaire ne correspond à ces filtres.'));
     bindFilters(el);
     act(el, '[data-status]', function (b) {
       var x = map[b.dataset.status];
-      statusModal('Statut de ' + x.code, x.status, STATUS_BEN, function (status) {
+      statusModal('Statut de ' + (x.code || benName(x, pr)), x.status, STATUS_BEN, function (status) {
         return DP.api.update('beneficiaries', { id: 'eq.' + x.id }, { status: status });
       });
     });
+    act(el, '[data-assign]', function (b) { return openAssignAgent(b.dataset.assign); });
+  }
+
+  /* Affectation d’un Agent à un bénéficiaire en brouillon (catégorie non encore choisie). Le serveur contrôle la règle. */
+  async function openAssignAgent(userId) {
+    var lk = await lookups();
+    var zmap = byId(lk.zones);
+    var hasQ = lk.quartiers.length > 0;
+    var m = ui.modal('Affecter un Agent',
+      '<p class="small muted">Le bénéficiaire reste en attente de catégorie : il la choisit dans son espace après validation.</p>' +
+      (lk.agents.length ? '' : ui.alert('warn', '<strong>Aucun Agent actif pour le moment.</strong> Validez d’abord un Agent.')) +
+      '<form class="form" id="as">' +
+      ui.field({ name: 'agent', label: 'Agent de rattachement', type: 'select', options: lk.agents.map(function (a) {
+        return [a.id, pname(a) + ' (' + (a.code || '') + ') — ' + (zmap[a.zone_id] ? zmap[a.zone_id].name : '—')];
+      }), placeholder: 'Choisir un Agent actif', required: true, dataType: 'nullable' }) +
+      (hasQ ? ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: [], placeholder: 'Choisir l’Agent d’abord', dataType: 'nullable',
+        hint: 'Facultatif. Proposé selon la zone de l’Agent.' }) : '') +
+      '<div class="form-actions"><button class="btn btn-primary" type="submit">Affecter</button></div></form>');
+    var form = m.el.querySelector('#as');
+    var F = form.elements;
+    if (hasQ) {
+      var refreshQuartier = function () {
+        var a = lk.agents.find(function (x) { return String(x.id) === F.agent.value; });
+        F.quartier.disabled = !a;
+        F.quartier.innerHTML = a ? options(quartiersOfZone(lk, a.zone_id), '', 'Aucun quartier précis') : options([], '', 'Choisir l’Agent d’abord');
+      };
+      F.agent.addEventListener('change', refreshQuartier);
+      refreshQuartier();
+    }
+    ui.bindForm(form, async function (d) {
+      if (!d.agent) throw new Error('Choisissez un Agent.');
+      await DP.api.rpc('admin_assign_agent', { p_profile: userId, p_agent: d.agent, p_quartier: d.quartier ? Number(d.quartier) : null });
+      m.close();
+      refresh();
+      return 'Agent affecté.';
+    }, null);
   }
 
   /* ---------- Partenaires ---------- */
@@ -496,7 +542,7 @@
       ui.card(null, filterBar('#/admin/projets', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(STATUS_PROJ) }]) +
         ui.table([
           { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
-          { label: 'Bénéficiaire', render: function (p) { var b = bens[p.beneficiary_id]; return esc(b ? b.code + ' — ' + bname(b) : '—'); } },
+          { label: 'Bénéficiaire', render: function (p) { var b = bens[p.beneficiary_id]; return esc(b ? bcode(b) + ' — ' + bname(b) : '—'); } },
           { label: 'Montant', cls: 'num', render: function (p) { return ui.money(p.amount, p.currency); } },
           { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
           { label: 'Créé le', render: function (p) { return ui.date(p.created_at); } },
@@ -527,7 +573,7 @@
       }).map(function (k) { return [k, DP.labels.status[k]]; })) }]) +
         ui.table([
           { label: 'Projet', render: function (c) { var p = projects[c.project_id]; return '<strong>' + esc(p ? p.title : '—') + '</strong><div class="small muted">' + esc(p ? ui.money(p.amount, p.currency) : '') + '</div>'; } },
-          { label: 'Bénéficiaire', render: function (c) { var p = projects[c.project_id]; var b = p ? bens[p.beneficiary_id] : null; return esc(b ? b.code : '—'); } },
+          { label: 'Bénéficiaire', render: function (c) { var p = projects[c.project_id]; var b = p ? bens[p.beneficiary_id] : null; return esc(bcode(b)); } },
           { label: 'Partenaire', render: function (c) { var x = partners[c.partner_id]; return esc(x ? x.legal_name : '—') + (x ? '<div class="small muted">' + esc(DP.labels.partnerCategory[x.category] || '') + '</div>' : ''); } },
           { label: 'Motif', render: function (c) { return esc(short(c.motive, 120)); } },
           { label: 'Statut', render: function (c) { return ui.badge(c.status) + (c.admin_reason ? '<div class="small muted">' + esc(short(c.admin_reason, 80)) + '</div>' : ''); } },
@@ -661,7 +707,7 @@
       var list = await DP.api.get('carrefour_members', { select: '*', carrefour_id: 'eq.' + c.id, order: 'requested_at.asc' });
       var bens = await beneficiariesFor(list.map(function (m) { return m.beneficiary_id; }));
       var body = list.length ? ui.table([
-        { label: 'Bénéficiaire', render: function (m) { var x = bens[m.beneficiary_id]; return esc(x ? x.code + ' — ' + bname(x) : '—'); } },
+        { label: 'Bénéficiaire', render: function (m) { var x = bens[m.beneficiary_id]; return esc(x ? bcode(x) + ' — ' + benName(x, null) : '—'); } },
         { label: 'Statut', render: function (m) { return ui.badge(m.status); } },
         { label: 'Action', cls: 'actions', render: function (m) {
           if (m.status === 'accepted' || m.status === 'refused') return '—';
@@ -761,7 +807,7 @@
         : '<strong>Paiements désactivés.</strong> Les commandes sont enregistrées, mais aucun paiement n’est collecté par la plateforme. Une confirmation manuelle reste possible après réception réelle des fonds.') +
       ui.card('Commandes de visibilité', ui.table([
         { label: 'Titulaire', render: function (o) {
-          var who = o.beneficiary_id && bens[o.beneficiary_id] ? bens[o.beneficiary_id].code + ' — ' + bname(bens[o.beneficiary_id]) : pname(owners[o.owner_id]);
+          var who = o.beneficiary_id && bens[o.beneficiary_id] ? bcode(bens[o.beneficiary_id]) + ' — ' + bname(bens[o.beneficiary_id]) : pname(owners[o.owner_id]);
           return esc(who) + '<div class="small muted">' + esc(o.category === 'agent' ? 'Agent' : 'Catégorie ' + o.category) + '</div>';
         } },
         { label: 'Durée', render: function (o) { return o.days + ' j' + '<div class="small muted">' + ui.date(o.starts_on) + ' → ' + ui.date(o.ends_on) + '</div>'; } },
