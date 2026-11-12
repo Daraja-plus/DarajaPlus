@@ -294,6 +294,7 @@
       'Il ne garantit aucun financement : le partenaire reste seul décideur.</div>' +
       '<nav aria-label="Pied de page"><a href="#/mentions">Mentions légales</a> <a href="#/mentions">Confidentialité</a> ' +
       '<a href="#/a-propos">À propos</a> <a href="#/contact">Contact</a></nav>' +
+      '<div class="btn-row"><button type="button" class="btn btn-outline btn-sm" data-install>Installer DarajaPlus sur mon téléphone</button></div>' +
       '<div class="small muted">Inscription gratuite pour les bénéficiaires et les partenaires.</div></div></footer>';
   }
 

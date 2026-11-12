@@ -7,6 +7,10 @@
   <meta name="description" content="DarajaPlus met en relation les MPME et porteurs de projets avec des partenaires financiers et d’accompagnement. Inscription gratuite.">
   <meta name="theme-color" content="#15803d">
   <link rel="icon" href="assets/logo-daraja.png" type="image/png">
+  <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+  <link rel="manifest" href="manifest.json">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="DarajaPlus">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -27,6 +31,29 @@
   <script src="js/host-agent.js"></script>
   <script src="js/beneficiary.js"></script>
   <script src="js/partner.js"></script>
+  <script>
+    /* Installation sur téléphone ou ordinateur : le bouton du pied de page n'apparaît que si le navigateur le propose. */
+    window.addEventListener('beforeinstallprompt', function (e) {
+      e.preventDefault();
+      window.DP_installPrompt = e;
+      document.documentElement.classList.add('can-install');
+    });
+    window.addEventListener('appinstalled', function () {
+      window.DP_installPrompt = null;
+      document.documentElement.classList.remove('can-install');
+    });
+    document.addEventListener('click', function (e) {
+      var b = e.target.closest && e.target.closest('[data-install]');
+      if (!b || !window.DP_installPrompt) return;
+      window.DP_installPrompt.prompt();
+      window.DP_installPrompt = null;
+      document.documentElement.classList.remove('can-install');
+    });
+    /* Cache hors ligne : l'application s'ouvre même avec une connexion faible ou coupée. */
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+    }
+  </script>
   <script>DP.start();</script>
 </body>
 </html>
