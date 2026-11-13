@@ -82,6 +82,10 @@ img { max-width: 100%; }
 .btn-danger { background: var(--bad); color: #fff; }
 .btn-orange { background: #ea580c; color: #fff; }
 .btn-orange:hover:not(:disabled) { background: #c2410c; }
+.btn-blue { background: #1d4ed8; color: #fff; }
+.btn-blue:hover:not(:disabled) { background: #1e40af; }
+/* Exemple affiché sous chaque rubrique de la présentation du projet */
+.example { margin: .5rem 0 .75rem; padding: .6rem .8rem; border-left: 4px solid var(--green); background: var(--green-soft); border-radius: 8px; font-size: .95rem; }
 [data-install] { display: none; }
 html.can-install [data-install] { display: inline-flex; }
 .btn-sm { min-height: 36px; padding: .35rem .7rem; font-size: .9rem; }

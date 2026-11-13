@@ -104,10 +104,14 @@
           ? 'Votre choix (<strong>' + esc(catNom(cstate.wish)) + '</strong>) attend la validation de votre Agent.'
           : 'Lisez les avantages, les limites et les exigences de chaque catégorie, puis faites votre choix.');
       step = ui.card('Étape 1 : votre catégorie', '<p>' + txt + '</p>' +
-        '<div class="btn-row"><a class="btn btn-primary" href="#/espace/categorie">Ouvrir « Ma catégorie »</a></div>');
+        '<div class="btn-row"><a class="btn btn-primary" href="#/espace/categorie">Ouvrir « Ma catégorie »</a></div>' +
+        '<div class="btn-row"><a class="btn btn-blue" href="#/espace/presentation">Présenter mon projet</a></div>');
     }
+    /* Sans carte « Étape 1 » (catégorie acceptée), la présentation reste accessible dans sa propre carte. */
+    var presentation = step ? '' : ui.card('Votre présentation', '<p class="small muted">Rédigez la présentation de votre projet, rubrique par rubrique.</p>' +
+      '<div class="btn-row"><a class="btn btn-blue" href="#/espace/presentation">Présenter mon projet</a></div>');
 
-    el.innerHTML = ui.header('Bonjour ' + (b.prenom || '') + ' !', statusText) + step +
+    el.innerHTML = ui.header('Bonjour ' + (b.prenom || '') + ' !', statusText) + step + presentation +
       ui.card(null, '<dl class="kv">' +
         '<dt>Identifiant</dt><dd><strong>' + esc(pr.identifiant || '—') + '</strong></dd>' +
         '<dt>Code</dt><dd>' + esc(b.code || 'Attribué quand votre catégorie est acceptée') + '</dd>' +

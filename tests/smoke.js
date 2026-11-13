@@ -74,7 +74,7 @@ const ROUTES = {
   admin: ['/admin', '/admin/comptes', '/admin/comptes?statut=active', '/admin/hotes', '/admin/agents', '/admin/beneficiaires', '/admin/beneficiaires?categorie=bb', '/admin/partenaires', '/admin/projets', '/admin/ponts', '/admin/resultats', '/admin/offres', '/admin/carrefours', '/admin/annonces', '/admin/finances', '/admin/messages', '/admin/messages/' + BENEF_ID, '/admin/contacts', '/admin/territoires', '/admin/audit', '/admin/configuration', '/notifications', '/mon-compte'],
   host: ['/hote', '/hote/agents', '/hote/beneficiaires', '/hote/dossiers', '/hote/ponts', '/hote/carrefours', '/hote/annonces', '/messages', '/notifications', '/mon-compte'],
   agent: ['/agent', '/agent/categories', '/agent/beneficiaires', '/agent/beneficiaires/nouveau', '/agent/beneficiaires/' + BEN_ID, '/agent/projets', '/agent/offres', '/agent/carrefours', '/agent/annonces', '/agent/visibilite', '/messages', '/notifications', '/mon-compte'],
-  beneficiary: ['/espace', '/espace/categorie', '/espace/profil', '/espace/entreprises', '/espace/projets', '/espace/dossiers', '/espace/opportunites', '/espace/carrefours', '/espace/visibilite', '/messages', '/notifications', '/mon-compte'],
+  beneficiary: ['/espace', '/espace/categorie', '/espace/profil', '/espace/entreprises', '/espace/projets', '/espace/dossiers', '/espace/opportunites', '/espace/carrefours', '/espace/visibilite', '/espace/presentation', '/messages', '/notifications', '/mon-compte'],
   partner: ['/partenaire', '/partenaire/profil', '/partenaire/offres', '/partenaire/recherche', '/partenaire/dossiers', '/partenaire/resultats', '/messages', '/notifications', '/mon-compte']
 };
 
