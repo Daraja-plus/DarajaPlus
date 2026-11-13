@@ -265,6 +265,9 @@
         (r.establishment_description ? '<p class="small"><strong>Présentation de l’activité :</strong> ' + esc(r.establishment_description) + '</p>' : '') +
         (r.establishment_services ? '<p class="small"><strong>Produits et services :</strong> ' + esc(r.establishment_services) + '</p>' : '') +
         '<h3 class="h-sub">Photos de l’activité</h3>' + gallery +
+        (r.presentation_visible
+          ? '<div style="margin-top:.75rem"><button class="btn btn-outline btn-sm" type="button" data-pres="' + esc(r.project_id) + '">Voir la présentation</button></div>'
+          : '') +
         '<div style="margin-top:.75rem">' + action + '</div>' +
       '</div></article>';
   }
@@ -296,6 +299,11 @@
           (rows.length ? rows.map(projectCard).join('') : DP.ui.empty('Aucun projet validé ne correspond à ces critères pour le moment.'));
         box.querySelectorAll('[data-ask]').forEach(function (b) {
           b.addEventListener('click', function () { askConnection(b.dataset.ask, function () { load(sector, currency); }); });
+        });
+        box.querySelectorAll('[data-pres]').forEach(function (b) {
+          b.addEventListener('click', async function () {
+            try { await DP.presentation.show(b.dataset.pres); } catch (e) { DP.ui.toast(DP.ui.errMsg(e), 'bad'); }
+          });
         });
       } catch (e) {
         box.innerHTML = DP.ui.errorBox(e);

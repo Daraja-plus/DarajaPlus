@@ -1,7 +1,9 @@
 /* DarajaPlus — « Présenter mon projet » (espace bénéficiaire).
    Une fiche rédigée rubrique par rubrique, en quelques lignes, avec 1 à 4 photos du produit ou des réalisations.
-   Chaque rubrique a une aide et un exemple fictif. La fiche est privée : seul le bénéficiaire la voit pour l'instant
-   (l'administrateur et les partenaires n'y ont pas accès ; ce point reste à décider). */
+   Chaque rubrique a une aide et un exemple fictif.
+   Trois statuts : « brouillon » (seul le bénéficiaire voit la fiche), « publiée » (l'administrateur la vérifie),
+   « visible » (l'administrateur l'a rendue visible aux partenaires). Le statut « visible » n'est jamais envoyé par le site :
+   la base le refuse pour le bénéficiaire. Une modification d'une fiche visible la renvoie à la vérification. */
 (function () {
   'use strict';
 
@@ -71,6 +73,21 @@
     return ui.card((i + 1) + '. ' + s.label, body);
   }
 
+  /* Bannière selon le statut : ce que voient le bénéficiaire, l'administrateur et les partenaires. */
+  function statusAlert(row) {
+    var statut = row ? row.statut : 'brouillon';
+    if (statut === 'visible') {
+      return ui.alert('ok', '<strong>Visible des partenaires</strong> depuis le ' + ui.date(row.visible_at) + '. ' +
+        'Toute modification la renvoie à la vérification de l’administrateur. « Enregistrer comme brouillon » la retire des partenaires.');
+    }
+    if (statut === 'publiee') {
+      return ui.alert('warn', '<strong>Publiée le ' + ui.date(row.publiee_at) + '.</strong> ' +
+        'L’administrateur la vérifie ; elle n’est pas encore visible des partenaires. Toute modification la renvoie à la vérification.');
+    }
+    return ui.alert('info', '<strong>Brouillon.</strong> Seul vous voyez cette présentation. ' +
+      'Publiez-la quand elle est complète : l’administrateur la vérifiera avant toute visibilité auprès des partenaires.');
+  }
+
   async function renderPresentation(el) {
     var row = await loadRow();
     var content = (row && row.content) || {};
@@ -80,26 +97,44 @@
     }));
 
     el.innerHTML = ui.header('Présenter mon projet', 'Rédigez votre projet rubrique par rubrique, en quelques lignes : clair, concis et précis.') +
-      ui.alert('info', 'Votre présentation est enregistrée et vous pouvez la modifier à tout moment. Pour le moment, vous seul la voyez.') +
+      statusAlert(row) +
       '<form class="form" id="f-pres" data-reset="false" novalidate>' +
+        '<input type="hidden" name="cible" value="brouillon">' +
         SECTIONS.map(function (s, i) {
           return sectionCard(s, i, content[s.key] || '', s.photos ? photosHtml(urls) : '');
         }).join('') +
-        '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer ma présentation</button></div>' +
+        '<div class="form-actions">' +
+          '<button class="btn btn-outline" type="submit" data-cible="brouillon">Enregistrer comme brouillon</button> ' +
+          '<button class="btn btn-primary" type="submit" data-cible="publiee">Publier</button>' +
+        '</div>' +
+        '<p class="small muted">« Publier » envoie la présentation à l’administrateur pour vérification. Pour publier, toutes les rubriques doivent être remplies ; les photos sont facultatives.</p>' +
       '</form>';
+
+    var form = el.querySelector('#f-pres');
+    /* Le bouton cliqué indique si la fiche est enregistrée comme brouillon ou publiée. */
+    el.querySelectorAll('[data-cible]').forEach(function (b) {
+      b.addEventListener('click', function () { form.elements.cible.value = b.dataset.cible; });
+    });
 
     var binders = [];
     for (var n = 0; n < PHOTO_SLOTS; n++) {
       binders.push(DP.photo.bind(el.querySelector('#pres-photo-' + n), { mode: 'form' }));
     }
 
-    ui.bindForm(el.querySelector('#f-pres'), async function (d) {
+    ui.bindForm(form, async function (d) {
+      var publier = d.cible === 'publiee';
       SECTIONS.forEach(function (s) {
         var max = s.key === 'titre' ? TITLE_MAX : TEXT_MAX;
         if ((d[s.key] || '').length > max) {
           throw new Error('« ' + s.label + ' » dépasse ' + max + ' caractères. Raccourcissez le texte.');
         }
       });
+      if (publier) {
+        var manque = SECTIONS.filter(function (s) { return !String(d[s.key] || '').trim(); }).map(function (s) { return s.label; });
+        if (manque.length) {
+          throw new Error('Pour publier, remplissez encore : ' + manque.join(', ') + '.');
+        }
+      }
       var newContent = {};
       SECTIONS.forEach(function (s) { newContent[s.key] = d[s.key] || ''; });
 
@@ -116,7 +151,7 @@
         }
       }
 
-      var payload = { content: newContent, photos: kept, updated_at: new Date().toISOString() };
+      var payload = { content: newContent, photos: kept, statut: publier ? 'publiee' : 'brouillon', updated_at: new Date().toISOString() };
       var updated = await DP.api.update('presentations', { user_id: 'eq.' + DP.api.uid }, payload);
       if (!updated || !updated.length) {
         await DP.api.insert('presentations', Object.assign({ user_id: DP.api.uid }, payload));
@@ -125,12 +160,114 @@
       var old = replaced.filter(function (p) { return p.indexOf(DP.api.uid + '/') === 0; });
       if (old.length) DP.api.removeFrom('visuels', old).catch(function () {});
       DP.navigate();
-      return 'Présentation enregistrée.';
+      return publier
+        ? 'Présentation publiée. L’administrateur va la vérifier.'
+        : 'Brouillon enregistré. Seul vous le voyez.';
     });
   }
 
+  /* ---------- Lecture d'une présentation (administrateur et partenaire) ---------- */
+  function readHtml(content, urls) {
+    return SECTIONS.map(function (s, i) {
+      var text = String(content[s.key] || '').trim();
+      var body = text ? '<p class="pre-wrap">' + esc(text) + '</p>' : '<p class="small muted">Non renseigné.</p>';
+      var gallery = '';
+      if (s.photos && urls && urls.length) {
+        gallery = '<div class="gallery">' + urls.map(function (u, n) {
+          return '<figure class="gallery-item">' +
+            (u ? '<img src="' + esc(u) + '" alt="Photo ' + (n + 1) + '">' : '<div class="gallery-missing">Photo indisponible</div>') +
+            '</figure>';
+        }).join('') + '</div>';
+      }
+      return '<h3 class="h-sub">' + (i + 1) + '. ' + esc(s.label) + '</h3>' + body + gallery;
+    }).join('');
+  }
+
+  var STATUT_ADMIN = {
+    publiee: '<span class="badge badge-warn">À vérifier</span>',
+    visible: '<span class="badge badge-ok">Visible des partenaires</span>'
+  };
+
+  /* ---------- Administrateur : vérifier et rendre visible ---------- */
+  async function renderRevue(el) {
+    var rows = await DP.api.get('presentations', { select: '*', order: 'updated_at.desc', limit: 300 });
+    var people = await DP.api.get('profiles', { select: 'id,identifiant,prenom,nom', role: 'eq.beneficiary' });
+    var byUser = {};
+    people.forEach(function (p) { byUser[p.id] = p; });
+
+    el.innerHTML = ui.header('Présentations des projets',
+        'Présentations publiées par les bénéficiaires. Vérifiez le contenu avant de la rendre visible : la rubrique « Vision et contact » peut contenir des coordonnées.') +
+      ui.card(null, ui.table([
+        { label: 'Bénéficiaire', render: function (r) {
+          var p = byUser[r.user_id] || {};
+          return '<strong>' + esc(p.identifiant || '—') + '</strong><div class="small">' + esc([p.prenom, p.nom].filter(Boolean).join(' ')) + '</div>';
+        } },
+        { label: 'Titre', render: function (r) { return esc((r.content && r.content.titre) || 'Sans titre'); } },
+        { label: 'Statut', render: function (r) { return STATUT_ADMIN[r.statut] || ''; } },
+        { label: 'Dernière modification', render: function (r) { return ui.dateTime(r.updated_at); } },
+        { label: 'Action', cls: 'actions', render: function (r) {
+          return '<button class="btn btn-sm btn-outline" type="button" data-revoir="' + esc(r.user_id) + '">Vérifier</button>';
+        } }
+      ], rows, 'Aucune présentation publiée pour le moment. Les brouillons ne sont pas visibles de l’administrateur.'));
+
+    el.querySelectorAll('[data-revoir]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var row = rows.find(function (r) { return r.user_id === b.dataset.revoir; });
+        if (row) ouvrirRevue(row, byUser[row.user_id] || {});
+      });
+    });
+  }
+
+  async function ouvrirRevue(row, p) {
+    var urls = await Promise.all((row.photos || []).map(function (ph) {
+      return DP.api.signedUrlFor('visuels', ph, 3600).catch(function () { return ''; });
+    }));
+    var visible = row.statut === 'visible';
+    var actions = visible
+      ? '<button type="button" class="btn btn-outline" data-set="retirer">Retirer la visibilité</button>'
+      : '<button type="button" class="btn btn-primary" data-set="visible">Rendre visible aux partenaires</button>';
+    var m = ui.modal('Présentation de ' + (p.identifiant || 'ce bénéficiaire'),
+      '<p class="small muted">Statut : ' + (STATUT_ADMIN[row.statut] || '') + ' · Dernière modification : ' + ui.dateTime(row.updated_at) + '</p>' +
+        readHtml(row.content || {}, urls),
+      actions + ' <button type="button" class="btn btn-ghost" data-close>Fermer</button>');
+
+    m.el.querySelector('[data-set]').addEventListener('click', async function (e) {
+      var rendreVisible = e.currentTarget.dataset.set === 'visible';
+      if (rendreVisible) {
+        var ok = await ui.confirm('Rendre cette présentation visible des partenaires ? Vérifiez tout le contenu, en particulier la rubrique « Vision et contact ».', 'Rendre visible');
+        if (!ok) return;
+      }
+      try {
+        await DP.api.rpc('admin_set_presentation_visibility', { p_user: row.user_id, p_visible: rendreVisible });
+        m.close();
+        ui.toast(rendreVisible ? 'Présentation visible des partenaires.' : 'Visibilité retirée.', 'ok');
+        DP.navigate();
+      } catch (err) {
+        ui.toast(ui.errMsg(err), 'bad');
+      }
+    });
+  }
+
+  /* ---------- Partenaire : lire la présentation d'un projet disponible ---------- */
+  async function montrerPartenaire(projectId) {
+    var res = await DP.api.rpc('partner_presentation', { p_project: projectId });
+    if (!res) {
+      ui.toast('Cette présentation n’est pas disponible.', 'bad');
+      return;
+    }
+    var urls = await Promise.all((res.photos || []).map(function (ph) {
+      return DP.api.signedUrlFor('visuels', ph, 3600).catch(function () { return ''; });
+    }));
+    ui.modal('Présentation du projet',
+      '<p class="small muted">Présentation rédigée par le bénéficiaire et vérifiée par l’administrateur de DarajaPlus.</p>' +
+      readHtml(res.content || {}, urls));
+  }
+
+  DP.presentation = { show: montrerPartenaire };
+
   /* ---------- Routes ---------- */
   DP.register([
-    { path: '/espace/presentation', roles: ROLE, title: 'Présenter mon projet', render: renderPresentation }
+    { path: '/espace/presentation', roles: ROLE, title: 'Présenter mon projet', render: renderPresentation },
+    { path: '/admin/presentations', roles: ['admin'], title: 'Présentations', render: renderRevue }
   ]);
 })();

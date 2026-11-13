@@ -15,7 +15,7 @@
     admin: [
       ['Vue générale', '#/admin'], ['Comptes à valider', '#/admin/comptes'], ['Hôtes', '#/admin/hotes'],
       ['Agents', '#/admin/agents'], ['Bénéficiaires', '#/admin/beneficiaires'], ['Partenaires', '#/admin/partenaires'],
-      ['Projets & besoins', '#/admin/projets'], ['Ponts / mises en relation', '#/admin/ponts'],
+      ['Projets & besoins', '#/admin/projets'], ['Présentations', '#/admin/presentations'], ['Ponts / mises en relation', '#/admin/ponts'],
       ['Résultats déclarés', '#/admin/resultats'], ['Offres', '#/admin/offres'], ['Carrefours', '#/admin/carrefours'],
       ['Annonces', '#/admin/annonces'], ['Finances & visibilité', '#/admin/finances'],
       ['Messages privés', '#/admin/messages'], ['Contacts', '#/admin/contacts'], ['Territoires', '#/admin/territoires'],

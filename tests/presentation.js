@@ -2,10 +2,12 @@
    1) accueil, catégorie non acceptée : bouton bleu « Présenter mon projet » sous le bouton vert « Ouvrir Ma catégorie » ;
    2) accueil, catégorie acceptée : carte « Votre présentation » avec le bouton bleu ;
    3) page : 11 rubriques, chacune avec une aide et un exemple ; 4 emplacements photo ;
-   4) texte trop long : message, aucune demande envoyée ;
-   5) enregistrement : texte et photo envoyés (dossier du bénéficiaire), message de confirmation ;
-   6) nouvelle visite : les réponses et la photo enregistrées sont réaffichées ;
-   7) aucune erreur JavaScript et aucun « undefined », « null » ou « NaN ».
+   4) titre trop long : message, aucune demande envoyée ;
+   5) « Enregistrer comme brouillon » : texte et photo envoyés (dossier du bénéficiaire), statut « brouillon » ;
+   6) « Publier » incomplet : refusé, les rubriques manquantes sont nommées, rien n’est envoyé ;
+   7) « Publier » complet : statut « publiée » envoyé, bannière « Publiée le » à la nouvelle visite ;
+   8) nouvelle visite : les réponses et la photo enregistrées sont réaffichées ;
+   9) aucune erreur JavaScript et aucun « undefined », « null » ou « NaN ».
    Usage :
      1) servir le dossier :  python3 -m http.server 8765   (depuis le dossier DarajaPlus)
      2) lancer le test   :  node tests/presentation.js     (variable BASE pour une autre adresse)
@@ -21,6 +23,17 @@ const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers
 const BAD = /\b(undefined|null|NaN)\b/;
 const TINY_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
 const SECTIONS = ['Titre', 'Problème', 'Solution', 'Produit ou service', 'Marché', 'Modèle économique', 'Concurrence', 'Go-to-market', 'Équipe', 'Demande', 'Vision et contact'];
+const REPONSES = {
+  solution: 'Un kiosque solaire loue des batteries chargées.',
+  produit: 'Prototype en bois, testé pendant un mois.',
+  marche: 'TAM : 40 000 commerçants. SAM : 8 000. SOM : 800 clients.',
+  modele: 'Location à l’heure et abonnement mensuel.',
+  concurrence: 'Les groupes électrogènes coûtent plus cher.',
+  go_to_market: 'Partenariat avec trois marchés.',
+  equipe: 'Nous sommes trois.',
+  demande: '3 000 USD pour dix kiosques.',
+  vision: 'Dans trois ans : quarante kiosques dans deux villes.'
+};
 
 let failures = 0;
 function check(label, ok, extra) {
@@ -60,7 +73,14 @@ async function openContext(browser, opts) {
     if (p === '/rest/v1/rpc/beneficiary_category_state') return reply({});
     if (p === '/rest/v1/presentations') {
       if (m === 'GET') return reply(state.row ? [state.row] : []);
-      if (m === 'PATCH') return reply(state.row ? [{}] : []);
+      if (m === 'PATCH') {
+        /* Comme la base : la mise à jour fusionne les champs, et la date de publication suit le statut. */
+        if (!state.row) return reply([]);
+        const patch = JSON.parse(req.postData() || '{}');
+        state.row = Object.assign({}, state.row, patch);
+        if (patch.statut === 'publiee') state.row.publiee_at = '2026-11-13T09:00:00Z';
+        return reply([state.row]);
+      }
       if (m === 'POST') {
         state.row = Object.assign({ user_id: USER_ID }, JSON.parse(req.postData() || '{}'));
         return reply([{}]);
@@ -130,37 +150,60 @@ async function bodyText(page) {
     check('page : les 11 rubriques sont affichées dans l’ordre', titlesOk);
     check('page : un exemple (fictif) sous chaque rubrique', (await p3.page.locator('#f-pres .example').count()) === 11);
     check('page : 4 emplacements pour les photos', (await p3.page.locator('#f-pres [data-photo]').count()) === 4);
+    check('page : deux boutons, « Enregistrer comme brouillon » et « Publier »',
+      (await p3.page.locator('#f-pres button[data-cible="brouillon"]').count()) === 1 &&
+      (await p3.page.locator('#f-pres button[data-cible="publiee"]').count()) === 1);
     check('page : aucune erreur JavaScript', p3.errors.length === 0, p3.errors.join(' | '));
 
-    /* 4) Texte trop long */
+    /* 4) Titre trop long */
     await p3.page.locator('#f-pres input[name="titre"]').fill('x'.repeat(130));
-    await p3.page.locator('#f-pres button[type="submit"]').click();
+    await p3.page.locator('#f-pres button[data-cible="brouillon"]').click();
     const tooLong = await until(async () => (await bodyText(p3.page)).indexOf('dépasse 120 caractères') !== -1, 5000);
     check('titre trop long : message affiché', tooLong);
     check('titre trop long : rien n’est envoyé', c3.__log.filter((e) => e.path === '/rest/v1/presentations' && e.method !== 'GET').length === 0);
 
-    /* 5) Enregistrement avec une photo */
+    /* 5) Enregistrement comme brouillon, avec une photo */
     await p3.page.locator('#f-pres input[name="titre"]').fill('Kiosque test');
     await p3.page.locator('#f-pres textarea[name="probleme"]').fill('Problème de recharge pour les commerçants.');
     await p3.page.locator('#pres-photo-0 [data-photo-input]').setInputFiles({ name: 'prototype.png', mimeType: 'image/png', buffer: TINY_PNG });
-    await p3.page.locator('#f-pres button[type="submit"]').click();
-    const saved = await until(async () => (await bodyText(p3.page)).indexOf('Présentation enregistrée') !== -1, 15000);
-    check('enregistrement : message de confirmation affiché', saved);
+    await p3.page.locator('#f-pres button[data-cible="brouillon"]').click();
+    const saved = await until(async () => (await bodyText(p3.page)).indexOf('Brouillon enregistré') !== -1, 15000);
+    check('brouillon : message de confirmation affiché', saved);
     const writes = c3.__log.filter((e) => e.path === '/rest/v1/presentations' && (e.method === 'POST' || e.method === 'PATCH'));
-    check('enregistrement : la fiche est envoyée à la base', writes.length >= 1, writes.map((w) => w.method).join(','));
+    check('brouillon : la fiche est envoyée à la base', writes.length >= 1, writes.map((w) => w.method).join(','));
     const withText = writes.filter((w) => w.body.indexOf('Kiosque test') !== -1 && w.body.indexOf('Problème de recharge') !== -1);
-    check('enregistrement : les réponses sont dans la fiche', withText.length >= 1);
-    check('enregistrement : la photo est rangée dans le dossier du bénéficiaire',
-      withText.length >= 1 && withText[withText.length - 1].body.indexOf('"photos":["' + USER_ID + '/photo-') !== -1);
-    check('enregistrement : aucune erreur JavaScript', p3.errors.length === 0, p3.errors.join(' | '));
+    check('brouillon : les réponses sont dans la fiche', withText.length >= 1);
+    const dernier = withText.length ? withText[withText.length - 1].body : '';
+    check('brouillon : statut « brouillon » envoyé', dernier.indexOf('"statut":"brouillon"') !== -1);
+    check('brouillon : la photo est rangée dans le dossier du bénéficiaire', dernier.indexOf('"photos":["' + USER_ID + '/photo-') !== -1);
+    check('brouillon : aucune erreur JavaScript', p3.errors.length === 0, p3.errors.join(' | '));
 
-    /* 6) Nouvelle visite : les réponses et la photo sont réaffichées */
-    const p6 = await visit(c3, '#/espace/presentation');
-    const titreValue = await p6.page.locator('#f-pres input[name="titre"]').inputValue().catch(() => '');
+    /* 6) Publication incomplète : refusée, les rubriques manquantes sont nommées, rien n’est envoyé */
+    const avant = c3.__log.length;
+    await p3.page.locator('#f-pres button[data-cible="publiee"]').click();
+    const refus = await until(async () => (await bodyText(p3.page)).indexOf('Pour publier, remplissez encore') !== -1, 5000);
+    check('publier incomplet : message avec les rubriques manquantes', refus);
+    check('publier incomplet : rien n’est envoyé', c3.__log.slice(avant).filter((e) => e.method !== 'GET').length === 0);
+
+    /* 7) Publication complète */
+    for (const k of Object.keys(REPONSES)) {
+      await p3.page.locator('#f-pres textarea[name="' + k + '"]').fill(REPONSES[k]);
+    }
+    await p3.page.locator('#f-pres button[data-cible="publiee"]').click();
+    const publie = await until(async () => (await bodyText(p3.page)).indexOf('Présentation publiée') !== -1, 15000);
+    check('publier complet : message de confirmation affiché', publie);
+    const pub = c3.__log.filter((e) => e.path === '/rest/v1/presentations' && e.method === 'PATCH' && e.body.indexOf('"statut":"publiee"') !== -1);
+    check('publier complet : statut « publiee » envoyé', pub.length >= 1);
+    check('publier complet : les rubriques sont envoyées', pub.length >= 1 && pub[pub.length - 1].body.indexOf('quarante kiosques') !== -1);
+
+    /* 8) Nouvelle visite : les réponses, la photo et la bannière « Publiée » sont réaffichées */
+    const p8 = await visit(c3, '#/espace/presentation');
+    const titreValue = await p8.page.locator('#f-pres input[name="titre"]').inputValue().catch(() => '');
     check('nouvelle visite : le titre enregistré est réaffiché', titreValue === 'Kiosque test', titreValue);
-    check('nouvelle visite : la photo enregistrée est réaffichée', (await p6.page.locator('#pres-photo-0 img').count()) >= 1);
-    check('nouvelle visite : aucune erreur JavaScript', p6.errors.length === 0, p6.errors.join(' | '));
-    check('nouvelle visite : aucun « undefined », « null » ou « NaN »', !BAD.test(p6.text));
+    check('nouvelle visite : la photo enregistrée est réaffichée', (await p8.page.locator('#pres-photo-0 img').count()) >= 1);
+    check('nouvelle visite : bannière « Publiée le » affichée', p8.text.indexOf('Publiée le') !== -1);
+    check('nouvelle visite : aucune erreur JavaScript', p8.errors.length === 0, p8.errors.join(' | '));
+    check('nouvelle visite : aucun « undefined », « null » ou « NaN »', !BAD.test(p8.text));
   } catch (e) {
     failures++;
     console.log('FAIL exception : ' + (e && e.message ? e.message : e));
