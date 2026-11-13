@@ -1,4 +1,4 @@
-/* Mise en page des espaces privés : affichage téléphone (barre du bas, panneau Menu) et affichage
+/* Mise en page des espaces privés : affichage téléphone (barre d'onglets en haut, panneau Menu) et affichage
    ordinateur (menu latéral fixe). Données simulées : aucun appel réel à Supabase.
    Pour chaque rôle, vérifie : éléments affichés ou cachés selon la largeur, absence de défilement
    horizontal, panneau Menu complet, contenu centré et grille des accès rapides sur ordinateur.
@@ -86,7 +86,20 @@ async function scenarioPhone(browser, r) {
   const context = await openContext(browser, r.role, PHONE);
   const { page, errors } = await openPage(context, r.home);
   const tag = r.role + ' téléphone';
-  check(tag + ' : barre du bas affichée', await visible(page, '.tabbar'));
+  check(tag + ' : barre d’onglets affichée', await visible(page, '.tabbar'));
+  const bar = await page.evaluate(() => {
+    const t = document.querySelector('.tabbar').getBoundingClientRect();
+    const v = document.querySelector('#view').getBoundingClientRect();
+    return { tabTop: t.top, tabBottom: t.bottom, viewTop: v.top, inTopbar: !!document.querySelector('#topbar .tabbar') };
+  });
+  check(tag + ' : barre d’onglets en haut de l’écran, au-dessus du contenu',
+    bar.inTopbar && bar.tabTop < 120 && bar.viewTop >= bar.tabBottom - 1,
+    'haut ' + Math.round(bar.tabTop) + ' px, contenu à ' + Math.round(bar.viewTop) + ' px');
+  await page.evaluate(() => window.scrollTo(0, 400));
+  await page.waitForTimeout(100);
+  const scrolled = await page.evaluate(() => ({ y: window.scrollY, top: document.querySelector('.tabbar').getBoundingClientRect().top }));
+  check(tag + ' : la barre reste visible en défilant', scrolled.top < 120, 'défilement ' + Math.round(scrolled.y) + ' px');
+  await page.evaluate(() => window.scrollTo(0, 0));
   check(tag + ' : menu latéral caché', !(await visible(page, '.sidebar')));
   const tabCount = await page.locator('.tabbar > *').count();
   check(tag + ' : 5 boutons dans la barre du bas', tabCount === 5, tabCount + ' bouton(s)');

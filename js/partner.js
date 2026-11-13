@@ -101,7 +101,7 @@
         ['Résultats déclarés', outs.length, 'En attente de vérification']
       ]) +
       DP.ui.card('Accès rapides', '<div class="btn-row quick-links">' +
-        '<a class="btn btn-primary" href="#/partenaire/recherche">Rechercher des projets</a>' +
+        '<a class="btn btn-primary" href="#/partenaire/recherche">Projets disponibles</a>' +
         '<a class="btn btn-outline" href="#/partenaire/dossiers">Mes dossiers</a>' +
         '<a class="btn btn-outline" href="#/partenaire/offres">Mes offres</a>' +
         '<a class="btn btn-outline" href="#/partenaire/resultats">Déclarer un résultat</a>' +
@@ -226,12 +226,55 @@
     });
   }
 
+  /* Rubrique « Projets disponibles » : tous les projets validés (prêts, en cours, clôturés), avec leur statut.
+     Le partenaire voit l'identifiant du bénéficiaire, le projet, l'activité et ses photos. Jamais le profil. */
+  var CONN_ENDED = ['refused_admin', 'refused', 'closed', 'cancelled'];
+
+  function projectCard(r) {
+    var ended = !r.connection_status || CONN_ENDED.indexOf(r.connection_status) !== -1;
+    var action;
+    if (!ended) {
+      action = '<p class="small">Demande de mise en relation : ' + DP.ui.badge(r.connection_status) + '</p>';
+    } else if (r.status === 'ready') {
+      action = '<button class="btn btn-primary btn-sm" type="button" data-ask="' + esc(r.project_id) + '">Solliciter la mise en relation</button>';
+    } else {
+      action = '<p class="small muted">Mise en relation non disponible : ce projet est ' +
+        (r.status === 'in_progress' ? 'en cours d’accompagnement.' : 'clôturé.') + '</p>';
+    }
+    var gallery = (r.gallery && r.gallery.length)
+      ? '<div class="gallery">' + r.gallery.map(function (g) {
+          return '<figure class="gallery-item">' +
+            (g.url ? '<img src="' + esc(g.url) + '" alt="' + esc(g.caption || 'Photo de l’activité') + '">' : '<div class="gallery-missing">Photo indisponible</div>') +
+            '<figcaption class="small">' + esc(g.caption || 'Sans légende') + '</figcaption></figure>';
+        }).join('') + '</div>'
+      : '<p class="small muted">Aucune photo d’activité pour le moment.</p>';
+    return '<article class="card">' +
+      '<div class="card-head" style="display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem;flex-wrap:wrap">' +
+        '<div><strong>' + esc(r.title) + '</strong> <span class="small muted">' + esc(projectRef(r.project_id)) + '</span></div>' +
+        DP.ui.badge(r.status) + '</div>' +
+      '<div class="card-body">' +
+        '<dl class="kv">' +
+          '<dt>Bénéficiaire</dt><dd><strong>' + esc(r.beneficiary_identifiant || '—') + '</strong> ' + DP.ui.categoryBadge(r.category) + '</dd>' +
+          '<dt>Montant</dt><dd>' + DP.ui.money(r.amount, r.currency) + '</dd>' +
+          '<dt>Secteur</dt><dd>' + esc(r.sector || '—') + '</dd>' +
+          '<dt>Échéance</dt><dd>' + DP.ui.date(r.due_date) + '</dd>' +
+          '<dt>Activité</dt><dd>' + esc(r.establishment_name || 'Non précisée') + (r.establishment_sector ? ' · ' + esc(r.establishment_sector) : '') + '</dd>' +
+        '</dl>' +
+        (r.description ? '<p>' + esc(r.description) + '</p>' : '') +
+        (r.use_of_funds ? '<p class="small"><strong>Utilisation des fonds :</strong> ' + esc(r.use_of_funds) + '</p>' : '') +
+        (r.establishment_description ? '<p class="small"><strong>Présentation de l’activité :</strong> ' + esc(r.establishment_description) + '</p>' : '') +
+        (r.establishment_services ? '<p class="small"><strong>Produits et services :</strong> ' + esc(r.establishment_services) + '</p>' : '') +
+        '<h3 class="h-sub">Photos de l’activité</h3>' + gallery +
+        '<div style="margin-top:.75rem">' + action + '</div>' +
+      '</div></article>';
+  }
+
   async function renderSearch(el) {
     var p = await myPartner();
-    if (!p) { el.innerHTML = noPartnerHtml('Rechercher des projets'); return; }
+    if (!p) { el.innerHTML = noPartnerHtml('Projets disponibles'); return; }
 
-    el.innerHTML = DP.ui.header('Rechercher des projets',
-        'Projets prêts à être présentés, rattachés à des bénéficiaires actifs. Le nom et les coordonnées du bénéficiaire ne sont pas affichés.') +
+    el.innerHTML = DP.ui.header('Projets disponibles',
+        'Tous les projets validés par l’Administrateur, avec leur statut. Vous voyez l’identifiant du bénéficiaire, le projet et les photos de l’activité. Le nom, le téléphone, l’e-mail et l’adresse du bénéficiaire ne sont pas affichés.') +
       DP.ui.card('Filtres', '<form class="filters" id="f-filter">' +
         DP.ui.field({ name: 'sector', label: 'Secteur', placeholder: 'ex. commerce' }) +
         DP.ui.field({ name: 'currency', label: 'Devise', type: 'select', options: [['', 'Toutes'], ['USD', 'USD'], ['FC', 'FC']] }) +
@@ -242,24 +285,15 @@
       var box = el.querySelector('#results');
       DP.ui.loading(box);
       try {
-        var rows = await DP.api.rpc('partner_search_projects', { p_sector: sector || null, p_currency: currency || null });
-        var mine = await DP.api.get('connection_requests', { select: 'project_id,status', partner_id: 'eq.' + p.id, limit: 500 });
-        var open = {};
-        mine.forEach(function (c) {
-          if (['refused_admin', 'refused', 'closed', 'cancelled'].indexOf(c.status) === -1) open[c.project_id] = c.status;
-        });
-        box.innerHTML = DP.ui.card('Projets (' + rows.length + ')', DP.ui.table([
-          { label: 'Référence', render: function (r) { return '<span class="small">' + esc(projectRef(r.project_id)) + '</span>'; } },
-          { label: 'Titre', render: function (r) { return '<strong>' + esc(r.title) + '</strong><div class="small muted">' + esc(r.description ? r.description.slice(0, 140) : '') + '</div>'; } },
-          { label: 'Secteur', render: function (r) { return esc(r.sector || '—'); } },
-          { label: 'Montant', cls: 'num', render: function (r) { return DP.ui.money(r.amount, r.currency); } },
-          { label: 'Catégorie', render: function (r) { return DP.ui.categoryBadge(r.category); } },
-          { label: 'Échéance', render: function (r) { return DP.ui.date(r.due_date); } },
-          { label: 'Action', cls: 'actions', render: function (r) {
-            if (open[r.project_id]) return DP.ui.badge(open[r.project_id]);
-            return '<button class="btn btn-primary btn-sm" type="button" data-ask="' + esc(r.project_id) + '">Demander une mise en relation</button>';
-          } }
-        ], rows, 'Aucun projet ne correspond à ces critères pour le moment.'));
+        var rows = await DP.api.rpc('partner_available_projects', { p_sector: sector || null, p_currency: currency || null });
+        /* Photos d'activité : adresses signées, valables une heure. */
+        await Promise.all(rows.map(async function (r) {
+          r.gallery = await Promise.all((r.photos || []).map(async function (ph) {
+            return { caption: ph.caption, url: await DP.api.signedUrlFor('visuels', ph.path, 3600).catch(function () { return ''; }) };
+          }));
+        }));
+        box.innerHTML = '<p class="small muted">' + rows.length + ' projet(s) validé(s).</p>' +
+          (rows.length ? rows.map(projectCard).join('') : DP.ui.empty('Aucun projet validé ne correspond à ces critères pour le moment.'));
         box.querySelectorAll('[data-ask]').forEach(function (b) {
           b.addEventListener('click', function () { askConnection(b.dataset.ask, function () { load(sector, currency); }); });
         });
@@ -453,7 +487,7 @@
     { path: '/partenaire', roles: ROLE, title: 'Accueil partenaire', render: renderHome },
     { path: '/partenaire/profil', roles: ROLE, title: 'Mon profil partenaire', render: renderProfile },
     { path: '/partenaire/offres', roles: ROLE, title: 'Mes offres', render: renderOffers },
-    { path: '/partenaire/recherche', roles: ROLE, title: 'Rechercher des projets', render: renderSearch },
+    { path: '/partenaire/recherche', roles: ROLE, title: 'Projets disponibles', render: renderSearch },
     { path: '/partenaire/dossiers', roles: ROLE, title: 'Mes dossiers', render: renderDossiers },
     { path: '/partenaire/resultats', roles: ROLE, title: 'Résultats déclarés', render: renderResults }
   ]);

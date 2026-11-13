@@ -373,6 +373,9 @@
               DP.ui.field({ name: 'password', label: 'Mot de passe', type: 'password', hint: 'Au moins 6 caractères (8 recommandés).' }) +
               DP.ui.field({ name: 'confirm', label: 'Confirmer le mot de passe', type: 'password' }) +
             '</div>' +
+            '<div id="signup-photo" style="margin:.5rem 0 1rem">' + DP.photo.html({
+              mode: 'form', alt: 'Photo de profil', label: 'Photo de profil (facultatif — JPG, PNG ou WebP, 3 Mo maximum)'
+            }) + '</div>' +
             '<fieldset id="partner-fields" hidden style="border:1px solid var(--line);border-radius:12px;padding:1rem;margin:0">' +
               '<legend style="font-weight:700;padding:0 .3rem">Informations partenaire</legend>' +
               '<div class="form">' +
@@ -401,6 +404,7 @@
         function syncRole() { pf.hidden = form.querySelector('input[name=requested_role]:checked').value !== 'partner'; }
         form.querySelectorAll('input[name=requested_role]').forEach(function (r) { r.addEventListener('change', syncRole); });
         syncRole();
+        var photoCtl = DP.photo.bind(el.querySelector('#signup-photo'), { mode: 'form' });
 
         form.addEventListener('submit', async function (ev) {
           ev.preventDefault();
@@ -432,11 +436,21 @@
               });
             }
             if (btn) btn.disabled = true;
+            var photoFile = photoCtl.file();
             var res = await DP.api.signUp(email, pw, meta);
-            if (res && res.access_token) { await DP.app.afterLogin(null); return; }
+            if (res && res.access_token) {
+              /* Session ouverte tout de suite : la photo est enregistrée avant la première page. */
+              if (photoFile) {
+                try { await DP.photo.saveProfile(photoFile); }
+                catch (pe) { DP.ui.toast('Compte créé. La photo n’a pas pu être enregistrée : ajoutez-la dans Mon compte.', 'bad'); }
+              }
+              await DP.app.afterLogin(null);
+              return;
+            }
             el.querySelector('#signup-box').innerHTML = DP.ui.alert('ok',
               '<strong>Compte créé.</strong> Si une confirmation par e-mail est demandée, validez-la. ' +
-              'L’Administrateur général examinera ensuite votre demande. Tant que votre compte n’est pas validé, vous n’avez accès à aucun espace.');
+              'L’Administrateur général examinera ensuite votre demande. Tant que votre compte n’est pas validé, vous n’avez accès à aucun espace.' +
+              (photoFile ? '<p class="small">Votre photo n’a pas été gardée : ajoutez-la dans Mon compte après votre première connexion.</p>' : ''));
           } catch (e) {
             DP.ui.toast(DP.ui.errMsg(e), 'bad');
             if (btn) btn.disabled = false;

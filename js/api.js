@@ -171,6 +171,10 @@
 
     /* ---- Fichiers d'un bucket donné : « visuels » pour photos de profil et logos d'entreprise ---- */
     uploadTo: uploadTo,
-    signedUrlFor: signedUrlFor
+    signedUrlFor: signedUrlFor,
+    /* Supprime un ou plusieurs fichiers d'un bucket (la politique n'autorise que le propriétaire du dossier). */
+    removeFrom: function (bucket, paths) {
+      return call('DELETE', base() + '/storage/v1/object/' + bucket, { body: { prefixes: [].concat(paths) } });
+    }
   };
 })();

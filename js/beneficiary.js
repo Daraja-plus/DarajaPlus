@@ -240,21 +240,16 @@
     var docs = r[0], projects = r[1];
     var photo = pr.photo_path ? await DP.api.signedUrlFor('visuels', pr.photo_path, 3600).catch(function () { return ''; }) : '';
 
-    var avatar = photo
-      ? '<img src="' + esc(photo) + '" alt="Votre photo de profil" style="width:96px;height:96px;object-fit:cover;border-radius:50%">'
-      : '<div style="width:96px;height:96px;border-radius:50%;display:flex;align-items:center;justify-content:center;background:#e5f3ea;font-size:1.6rem;font-weight:700">' + esc(initials(b)) + '</div>';
-
     el.innerHTML = ui.header('Mon profil et mes pièces', 'Vos informations et les documents de votre dossier. Aucune pièce n’est partagée sans votre accord.') +
       '<div class="grid-2">' +
       ui.card('Mon identifiant', '<div style="font-size:1.6rem;font-weight:700;letter-spacing:.04em">' + esc(pr.identifiant || '—') + '</div>' +
         '<p class="small muted">Gardez cet identifiant : il identifie votre compte auprès de l’équipe DarajaPlus.</p>' +
         '<dl class="kv"><dt>Code</dt><dd>' + esc(b.code || 'Attribué quand votre catégorie est acceptée') + '</dd>' +
         '<dt>Catégorie</dt><dd>' + esc(catLabel(b.category)) + '</dd></dl>') +
-      ui.card('Photo de profil', '<div style="margin-bottom:.75rem">' + avatar + '</div>' +
-        '<form class="form" id="f-photo">' +
-        '<div class="field field-full"><span class="field-label">Choisir une photo (JPG, PNG ou WebP — 3 Mo maximum)</span>' +
-        '<input class="input" type="file" name="photo" accept="' + IMAGE_ACCEPT + '" required></div>' +
-        '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer la photo</button></div></form>') +
+      ui.card('Photo de profil', '<div id="ben-photo">' + DP.photo.html({
+        mode: 'save', url: photo, initials: initials(b), alt: 'Votre photo de profil',
+        label: 'Choisir une nouvelle photo (JPG, PNG ou WebP — 3 Mo maximum)'
+      }) + '</div>') +
       '</div>' +
       '<div class="grid-2">' +
       ui.card('Mes informations', '<form class="form" id="f-me">' +
@@ -280,15 +275,9 @@
         { label: 'Action', cls: 'actions', render: function (d) { return '<button class="btn btn-sm btn-outline" type="button" data-open-doc="' + esc(d.storage_path) + '">Ouvrir</button>'; } }
       ], docs, 'Aucune pièce déposée pour le moment.'));
 
-    ui.bindForm(el.querySelector('#f-photo'), async function (d, form) {
-      var file = form.querySelector('input[type=file]').files[0];
-      if (!file) throw new Error('Choisissez une photo.');
-      checkImage(file);
-      var path = DP.api.uid + '/photo-' + Date.now() + '_' + fileSafe(file.name);
-      await DP.api.uploadTo('visuels', path, file);
-      await DP.api.update('profiles', { id: 'eq.' + DP.api.uid }, { photo_path: path });
-      refresh();
-      return 'Photo enregistrée.';
+    DP.photo.bind(el.querySelector('#ben-photo'), {
+      mode: 'save',
+      save: function (file) { return DP.photo.saveProfile(file); }
     });
     ui.bindForm(el.querySelector('#f-me'), async function (d) {
       await DP.api.update('beneficiaries', { id: 'eq.' + b.id }, {
@@ -384,7 +373,14 @@
       ui.card('Mes entreprises', list.length
         ? list.map(entrepriseCard).join('')
         : ui.empty('Aucune entreprise pour le moment. Ajoutez-la à gauche ; vous pourrez la lier à un projet.')) +
-      '</div>';
+      '</div>' +
+      (list.length ? ui.card('Photos de l’activité',
+        '<div class="field field-full"><label class="field-label" for="act-pick">Entreprise</label>' +
+        '<select class="input" id="act-pick">' + list.map(function (e) {
+          return '<option value="' + esc(e.id) + '">' + esc(e.name) + '</option>';
+        }).join('') + '</select></div>' +
+        '<p class="small muted">Jusqu’à ' + ACT_MAX + ' photos par entreprise, chacune avec une légende. Les partenaires ne les voient que pour un projet validé de cette entreprise.</p>' +
+        '<div id="act-box" aria-live="polite"></div>') : '');
 
     ui.bindForm(el.querySelector('#f-ent'), async function (d, form) {
       await saveEntreprise(d, form, b, null);
@@ -402,6 +398,111 @@
         refresh();
         return 'Entreprise modifiée.';
       });
+    });
+
+    if (list.length) {
+      var pick = el.querySelector('#act-pick');
+      pick.addEventListener('change', function () { showActivity(el, map[pick.value]); });
+      showActivity(el, list[0]);
+    }
+  }
+
+  /* ---------- Photos de l’activité : 10 maximum par entreprise, avec légende ---------- */
+  var ACT_MAX = 10;
+
+  async function loadActivityPhotos(estId) {
+    var rows = await DP.api.get('establishment_photos', { select: '*', establishment_id: 'eq.' + estId, order: 'created_at.asc' });
+    await Promise.all(rows.map(async function (p) {
+      p.url = await DP.api.signedUrlFor('visuels', p.storage_path, 3600).catch(function () { return ''; });
+    }));
+    return rows;
+  }
+  function activityGallery(rows) {
+    if (!rows.length) return ui.empty('Aucune photo pour cette entreprise. Ajoutez-en une ci-dessous.');
+    return '<div class="gallery">' + rows.map(function (p) {
+      return '<figure class="gallery-item">' +
+        (p.url ? '<img src="' + esc(p.url) + '" alt="' + esc(p.caption || 'Photo de l’activité') + '">'
+          : '<div class="gallery-missing">Photo indisponible</div>') +
+        '<figcaption class="small">' + esc(p.caption || 'Sans légende') + '</figcaption>' +
+        '<div class="btn-row"><button class="btn btn-sm btn-outline" type="button" data-cap="' + esc(p.id) + '">Légende</button> ' +
+        '<button class="btn btn-sm btn-ghost" type="button" data-del-photo="' + esc(p.id) + '">Supprimer</button></div>' +
+        '</figure>';
+    }).join('') + '</div>';
+  }
+  async function showActivity(el, est) {
+    var box = el.querySelector('#act-box');
+    if (!box || !est) return;
+    ui.loading(box);
+    var rows = await loadActivityPhotos(est.id);
+    var rowsById = byId(rows);
+    box.innerHTML = '<p class="small"><strong>' + esc(est.name) + '</strong> · ' + rows.length + ' / ' + ACT_MAX + ' photos</p>' +
+      activityGallery(rows) +
+      (rows.length < ACT_MAX
+        ? '<form class="form" id="f-act-photo" style="margin-top:1rem">' +
+          '<div id="act-photo-field">' + DP.photo.html({
+            mode: 'form', alt: 'Photo de l’activité',
+            label: 'Ajouter une photo de l’activité (JPG, PNG ou WebP — 3 Mo maximum)'
+          }) + '</div>' +
+          '<div class="field field-full"><label class="field-label" for="act-caption">Légende (facultative, 200 caractères maximum)</label>' +
+          '<input class="input" id="act-caption" maxlength="200" placeholder="ex. Notre atelier de couture"></div>' +
+          '<div class="form-actions"><button class="btn btn-primary" type="submit">Ajouter la photo</button></div></form>'
+        : '<p class="small muted">Limite atteinte : supprimez une photo pour en ajouter une autre.</p>');
+
+    if (rows.length < ACT_MAX) {
+      var ctl = DP.photo.bind(box.querySelector('#act-photo-field'), { mode: 'form' });
+      box.querySelector('#f-act-photo').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var form = ev.currentTarget;
+        var btn = form.querySelector('[type=submit]');
+        var file = ctl.file();
+        var caption = form.querySelector('#act-caption').value.trim();
+        if (!file) { ui.toast('Choisissez une photo.', 'bad'); return; }
+        if (caption.length > 200) { ui.toast('La légende ne doit pas dépasser 200 caractères.', 'bad'); return; }
+        btn.disabled = true;
+        var path = null;
+        try {
+          path = await DP.photo.upload(file);
+          await DP.api.insert('establishment_photos', {
+            establishment_id: est.id, storage_path: path, caption: caption || null, created_by: DP.api.uid
+          });
+          ui.toast('Photo ajoutée.', 'ok');
+          await showActivity(el, est);
+        } catch (e) {
+          if (path) DP.api.removeFrom('visuels', path).catch(function () {});
+          ui.toast(ui.errMsg(e), 'bad');
+          btn.disabled = false;
+        }
+      });
+    }
+
+    act(box, '[data-cap]', function (btn) {
+      var row = rowsById[btn.dataset.cap];
+      if (!row) return;
+      var m = ui.modal('Légende de la photo', '<form class="form" id="f-cap">' +
+        '<div class="field field-full"><label class="field-label" for="cap-text">Légende (200 caractères maximum)</label>' +
+        '<input class="input" id="cap-text" maxlength="200" value="' + esc(row.caption || '') + '"></div>' +
+        '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer</button></div></form>');
+      m.el.querySelector('#f-cap').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        var text = m.el.querySelector('#cap-text').value.trim();
+        try {
+          await DP.api.update('establishment_photos', { id: 'eq.' + row.id }, { caption: text || null });
+          m.close();
+          await showActivity(el, est);
+        } catch (e) {
+          ui.toast(ui.errMsg(e), 'bad');
+        }
+      });
+    });
+
+    act(box, '[data-del-photo]', async function (btn) {
+      var row = rowsById[btn.dataset.delPhoto];
+      if (!row) return;
+      if (!(await ui.confirm('Supprimer cette photo de l’activité ?', 'Supprimer'))) return;
+      await DP.api.remove('establishment_photos', { id: 'eq.' + row.id });
+      DP.api.removeFrom('visuels', row.storage_path).catch(function () {});
+      ui.toast('Photo supprimée.', 'ok');
+      await showActivity(el, est);
     });
   }
 

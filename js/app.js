@@ -43,7 +43,7 @@
     ],
     partner: [
       ['Accueil', '#/partenaire'], ['Mon profil', '#/partenaire/profil'], ['Mes offres', '#/partenaire/offres'],
-      ['Rechercher des projets', '#/partenaire/recherche'], ['Mes dossiers', '#/partenaire/dossiers'],
+      ['Projets disponibles', '#/partenaire/recherche'], ['Mes dossiers', '#/partenaire/dossiers'],
       ['Messages (Administrateur)', '#/messages'], ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
     ]
   };
@@ -224,9 +224,15 @@
     {
       path: '/mon-compte', roles: ALL, title: 'Mon compte',
       render: async function (el, ctx) {
-        var p = DP.app.profile;
-        el.innerHTML = DP.ui.header('Mon compte', 'Vos informations personnelles et votre mot de passe') +
+        var p = DP.app.profile || {};
+        var photoUrl = p.photo_path ? await DP.api.signedUrlFor('visuels', p.photo_path, 3600).catch(function () { return ''; }) : '';
+        var initials = ((p.prenom || '').charAt(0) + (p.nom || '').charAt(0)).toUpperCase() || '?';
+        el.innerHTML = DP.ui.header('Mon compte', 'Votre photo, vos informations personnelles et votre mot de passe') +
           '<div class="grid-2">' +
+          DP.ui.card('Photo de profil', '<div id="mc-photo">' + DP.photo.html({
+            mode: 'save', url: photoUrl, initials: initials, alt: 'Votre photo de profil',
+            label: 'Choisir une nouvelle photo (JPG, PNG ou WebP — 3 Mo maximum)'
+          }) + '</div>') +
           DP.ui.card('Informations', '<form class="form" id="f-profile">' +
             '<div class="field-row">' + DP.ui.field({ name: 'nom', label: 'Nom', value: p.nom, required: true }) +
             DP.ui.field({ name: 'postnom', label: 'Post-nom', value: p.postnom, required: true }) + '</div>' +
@@ -251,6 +257,10 @@
           if (data.password !== data.confirm) throw new Error('Les deux mots de passe ne correspondent pas.');
           await DP.api.updatePassword(data.password);
           return 'Mot de passe modifié.';
+        });
+        DP.photo.bind(el.querySelector('#mc-photo'), {
+          mode: 'save',
+          save: function (file) { return DP.photo.saveProfile(file); }
         });
         var pushBox = el.querySelector('#push-box');
         DP.push.bind(pushBox);
@@ -396,9 +406,10 @@
     if (token !== navToken) return;
 
     if (priv) {
-      topbar.innerHTML = privateTopbar(profile, unread);
+      /* Téléphone : la barre d'onglets est placée dans l'en-tête collant, en haut de l'écran. */
+      topbar.innerHTML = privateTopbar(profile, unread) + tabbarHtml(profile, unread);
       app.innerHTML = '<div class="shell">' + sideHtml(profile, unread) + '<section class="view" id="view" tabindex="-1"></section></div>' +
-        tabbarHtml(profile, unread) + sheetHtml(profile, unread);
+        sheetHtml(profile, unread);
     } else {
       topbar.innerHTML = publicTopbar();
       app.innerHTML = '<section class="view public-view" id="view" tabindex="-1"></section>' + footerHtml();
