@@ -138,6 +138,11 @@
     updatePassword: function (password) {
       return call('PUT', base() + '/auth/v1/user', { body: { password: password } });
     },
+    /* Changement d'adresse : Supabase envoie un lien de confirmation à la nouvelle adresse ;
+       l'adresse ne change qu'après confirmation. */
+    updateEmail: function (email) {
+      return call('PUT', base() + '/auth/v1/user', { body: { email: email } });
+    },
     /* Lien reçu par e-mail (réinitialisation du mot de passe) : Supabase renvoie les jetons dans l'adresse. */
     adoptRecoveryLink: async function (accessToken, refreshToken, expiresIn) {
       setSession({ access_token: accessToken, refresh_token: refreshToken, expires_in: expiresIn });

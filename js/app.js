@@ -239,8 +239,12 @@
             DP.ui.field({ name: 'prenom', label: 'Prénom', value: p.prenom, required: true }) +
             DP.ui.field({ name: 'phone', label: 'Téléphone', value: p.phone, placeholder: '+243…', hint: 'Facultatif sauf indication contraire.' }) +
             '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer</button></div></form>' +
-            '<p class="small muted">Adresse e-mail : ' + esc(p.email || '—') + ' · Rôle : ' + esc(DP.labels.role[p.role]) +
+            '<p class="small muted">Rôle : ' + esc(DP.labels.role[p.role]) +
             (p.code ? ' · Identifiant : ' + esc(p.code) : '') + '</p>') +
+          DP.ui.card('Adresse e-mail', '<form class="form" id="f-email" novalidate>' +
+            '<p class="small muted">Adresse actuelle : <strong>' + esc(p.email || '—') + '</strong></p>' +
+            DP.ui.field({ name: 'email', label: 'Nouvelle adresse e-mail', type: 'email', required: true, placeholder: 'vous@exemple.com', hint: 'Un lien de confirmation est envoyé à la nouvelle adresse. Votre adresse ne change qu’après confirmation.' }) +
+            '<div class="form-actions"><button class="btn btn-primary" type="submit">Changer l’adresse e-mail</button></div></form>') +
           DP.ui.card('Mot de passe', '<form class="form" id="f-pw">' +
             DP.ui.field({ name: 'password', label: 'Nouveau mot de passe', type: 'password', required: true, hint: 'Au moins 6 caractères (8 recommandés).' }) +
             DP.ui.field({ name: 'confirm', label: 'Confirmer le mot de passe', type: 'password', required: true }) +
@@ -257,6 +261,13 @@
           if (data.password !== data.confirm) throw new Error('Les deux mots de passe ne correspondent pas.');
           await DP.api.updatePassword(data.password);
           return 'Mot de passe modifié.';
+        });
+        DP.ui.bindForm(el.querySelector('#f-email'), async function (data) {
+          var email = String(data.email || '').trim();
+          if (!/^\S+@\S+\.\S+$/.test(email)) throw new Error('Adresse e-mail invalide.');
+          if (email.toLowerCase() === String(p.email || '').toLowerCase()) throw new Error('Cette adresse est déjà la vôtre.');
+          await DP.api.updateEmail(email);
+          return 'Un lien de confirmation a été envoyé à la nouvelle adresse. Votre adresse ne change qu’après confirmation.';
         });
         DP.photo.bind(el.querySelector('#mc-photo'), {
           mode: 'save',

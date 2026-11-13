@@ -258,6 +258,7 @@
       render: function (el) {
         el.innerHTML = head('Contacter l’administration', 'Votre message est lu par l’Administrateur général.', 'Contact') +
           '<div class="auth-wrap"><div class="card"><div class="card-body" id="contact-box">' +
+          (DP.config.CONTACT_EMAIL ? '<p class="small muted">Adresse officielle : <a href="mailto:' + esc(DP.config.CONTACT_EMAIL) + '">' + esc(DP.config.CONTACT_EMAIL) + '</a></p>' : '') +
           '<form class="form" id="f-contact" novalidate>' +
             DP.ui.field({ name: 'name', label: 'Nom complet', required: true, placeholder: 'Prénom et nom' }) +
             '<div class="field-row">' +

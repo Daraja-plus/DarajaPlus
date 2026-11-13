@@ -9,6 +9,6 @@ DP.config = {
   SUPABASE_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5mY2Z3dnJsbGFjcHZsY3NveWNwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQyODE5NjEsImV4cCI6MjEwOTg1Nzk2MX0.CW28dKwQY_FIWBadeuBdXBBPx5BAPkj5EoTwlKN3M58',
   // Clé publique VAPID (notifications sur téléphone) : publique par conception, à ne pas confondre avec la clé privée.
   VAPID_PUBLIC_KEY: 'BLl12mljo3bAkAG2AuAfGsEYFLJwSgmySMFd6o1sW9_5fBOdr7ukNeOJmWgvzOSwXiiOIwusau7tvO68TqiMci0',
-  CONTACT_EMAIL: '', // À COMPLÉTER : adresse officielle (non fournie)
+  CONTACT_EMAIL: 'darajaplus1@gmail.com', // Adresse officielle : reçoit les courriels de la plateforme
   VERSION: '1.0'
 };
