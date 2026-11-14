@@ -204,6 +204,26 @@
     return '—';
   }
 
+  /* Message écrit à tous les comptes actifs : il arrive dans leurs notifications (et sur leur téléphone si l’alerte est activée). */
+  function openMessageActifs() {
+    var m = ui.modal('Écrire aux comptes actifs',
+      '<form class="form" id="ma">' +
+      ui.field({ name: 'title', label: 'Titre', required: true, full: true, hint: '120 caractères au maximum.' }) +
+      ui.field({ name: 'body', label: 'Message', type: 'textarea', rows: 5, required: true, full: true, hint: '1000 caractères au maximum.' }) +
+      '<p class="small muted">Destinataires : tous les comptes actifs (bénéficiaires, Agents, Hôtes, partenaires). Votre compte n’est pas inclus.</p>' +
+      '<div class="form-actions"><button class="btn btn-primary" type="submit">Envoyer</button></div></form>');
+    ui.bindForm(m.el.querySelector('#ma'), async function (d) {
+      var titre = String(d.title || '').trim();
+      var texte = String(d.body || '').trim();
+      if (!titre || !texte) throw new Error('Le titre et le message sont obligatoires.');
+      if (!(await ui.confirm('Envoyer ce message à tous les comptes actifs ? Il arrive dans leurs notifications, et sur leur téléphone si l’alerte est activée. L’envoi ne peut pas être annulé.', 'Envoyer'))) return false;
+      var n = await DP.api.rpc('admin_ecrire_aux_actifs', { p_title: titre, p_body: texte });
+      m.close();
+      ui.toast('Message envoyé à ' + n + ' compte' + (n > 1 ? 's' : '') + ' actif' + (n > 1 ? 's' : '') + '.', 'ok');
+      return false;
+    });
+  }
+
   async function renderAccounts(el, ctx) {
     var filter = (ctx.query && ctx.query.get('statut')) || 'pending';
     var tabs = [['pending', 'En attente'], ['active', 'Actifs'], ['suspended', 'Suspendus'], ['rejected', 'Refusés']];
@@ -214,6 +234,8 @@
       '<div class="tabs" role="tablist">' + tabs.map(function (t) {
         return '<a class="tab' + (t[0] === filter ? ' active' : '') + '" href="#/admin/comptes?statut=' + t[0] + '">' + esc(t[1]) + '</a>';
       }).join('') + '</div>' +
+      (filter === 'active' ? ui.card(null, '<div class="btn-row"><button class="btn btn-primary" type="button" data-ecrire-actifs>Écrire aux comptes actifs</button></div>' +
+        '<p class="small muted">Le message arrive dans les notifications de chaque compte actif, avec une alerte sur téléphone si elle est activée. Votre compte n’est pas inclus.</p>') : '') +
       ui.card(null, ui.table([
         { label: 'Nom', render: function (p) { return '<strong>' + esc(pname(p)) + '</strong>' + (p.identifiant ? ' <span class="small muted">' + esc(p.identifiant) + '</span>' : '') + (p.code ? '<div class="small muted">' + esc(p.code) + '</div>' : ''); } },
         { label: 'Rôle', render: function (p) { return esc(DP.labels.role[p.role] || p.role); } },
@@ -227,6 +249,7 @@
       ], rows, 'Aucun compte dans cette catégorie.'));
 
     act(el, '[data-review]', function (b) { return openReview(map[b.dataset.review], lk); });
+    act(el, '[data-ecrire-actifs]', function () { openMessageActifs(); });
     act(el, '[data-quick-approve]', async function (b) {
       var p = map[b.dataset.quickApprove];
       /* Hôte et Agent : l'affectation (zone, Hôte) doit être choisie avant validation, la fenêtre s'ouvre.
