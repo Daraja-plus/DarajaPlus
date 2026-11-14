@@ -2,7 +2,8 @@
    A) administrateur : lien « Présentations » dans le menu ; liste avec le statut « À vérifier » ;
       ouverture de la fiche (11 rubriques) ; « Rendre visible aux partenaires » après confirmation ;
       envoi de la visibilité à la base ;
-   B) partenaire : bouton « Voir la présentation » seulement si la fiche est visible ; fiche ouverte avec les 11 rubriques ;
+   B) partenaire : bouton « Voir la présentation » seulement si la fiche est visible ; fiche ouverte avec 10 rubriques
+      (sans « Vision et contact », même si la réponse la contenait) ; zone, quartier et rue affichés ;
    C) aucune erreur JavaScript et aucun « undefined », « null » ou « NaN ».
    Usage :
      1) servir le dossier :  python3 -m http.server 8765   (depuis le dossier DarajaPlus)
@@ -84,7 +85,8 @@ async function openContext(browser, role, opts) {
     if (p === '/rest/v1/rpc/partner_available_projects') {
       return reply([{ project_id: 'p-1', reference: 'p-1', title: 'Achat de matériel', sector: 'Commerce', description: 'Description du projet',
         use_of_funds: 'Stock', amount: 1500, currency: 'USD', due_date: '2027-03-01', status: 'ready', created_at: NOW,
-        beneficiary_identifiant: 'AH1A1Bb1', category: 'bb', establishment_name: 'Kiosque', establishment_sector: 'Commerce',
+        beneficiary_identifiant: 'AH1A1Bb1', category: 'bb', zone: 'Zone 1', quartier: 'Quartier 1', rue: 'R2',
+        establishment_name: 'Kiosque', establishment_sector: 'Commerce',
         establishment_description: null, establishment_services: null, photos: [], connection_status: null,
         presentation_visible: !!(opts && opts.visible) }]);
     }
@@ -145,6 +147,8 @@ async function bodyText(page) {
       demande && (await bodyText(va.page)).indexOf('Vision et contact') !== -1);
     await va.page.locator('.modal [data-ok]').click();
 
+    /* L'appel part après la fermeture de la confirmation : on attend qu'il soit enregistré. */
+    await until(async () => ca.__log.some((e) => e.path === '/rest/v1/rpc/admin_set_presentation_visibility'), 5000);
     const appels = ca.__log.filter((e) => e.path === '/rest/v1/rpc/admin_set_presentation_visibility');
     check('admin : visibilité envoyée à la base une seule fois',
       appels.length === 1 && appels[0].body.indexOf('"p_visible":true') !== -1 && appels[0].body.indexOf('"p_user":"' + BEN_ID + '"') !== -1,
@@ -161,13 +165,18 @@ async function bodyText(page) {
       const bouton = vp.page.locator('[data-pres]');
       const projetAffiche = await until(async () => (await bodyText(vp.page)).indexOf('Achat de matériel') !== -1, 8000);
       check('partenaire (visible = ' + visible + ') : le projet est affiché', projetAffiche);
+      const carte = await bodyText(vp.page);
+      check('partenaire (visible = ' + visible + ') : zone, quartier et rue affichés',
+        carte.indexOf('Zone 1') !== -1 && carte.indexOf('Quartier 1') !== -1 && carte.indexOf('Rue') !== -1 && carte.indexOf('R2') !== -1);
       if (visible) {
         check('partenaire : bouton « Voir la présentation » si la fiche est visible', (await bouton.count()) === 1);
         await bouton.click();
-        const ouvert = await until(async () => (await vp.page.locator('.modal .h-sub').count()) === 11, 8000);
-        check('partenaire : la fiche s’ouvre avec les 11 rubriques', ouvert);
+        const ouvert = await until(async () => (await vp.page.locator('.modal .h-sub').count()) === 10, 8000);
+        check('partenaire : la fiche s’ouvre avec les 10 rubriques', ouvert);
         const texte = await vp.page.locator('.modal').first().innerText().catch(() => '');
-        check('partenaire : le texte de la fiche est lisible', texte.indexOf('quarante kiosques') !== -1);
+        check('partenaire : le texte de la fiche est lisible', texte.indexOf('Problème de recharge') !== -1 && texte.indexOf('3 000 USD') !== -1);
+        check('partenaire : la rubrique « Vision et contact » n’est jamais montrée',
+          texte.indexOf('Vision et contact') === -1 && texte.indexOf('quarante kiosques') === -1);
         check('partenaire : seul le projet choisi est demandé',
           cp.__log.some((e) => e.path === '/rest/v1/rpc/partner_presentation' && e.body.indexOf('"p_project":"p-1"') !== -1));
       } else {

@@ -36,8 +36,8 @@
       example: 'Nous sommes trois : moi (gestion), un technicien (installation) et une commerciale (ventes).' },
     { key: 'demande', label: 'Demande', help: 'Le montant recherché, l’usage prévu et les jalons à atteindre.',
       example: '3 000 USD pour acheter dix kiosques. Jalons : dix kiosques installés en quatre mois, cinquante clients réguliers en six mois.' },
-    { key: 'vision', label: 'Vision et contact', help: 'Où en sera le projet dans 1 à 3 ans si vous obtenez le financement, et comment vous joindre.',
-      example: 'Dans trois ans : quarante kiosques dans deux villes. Contact : nom, téléphone, adresse e-mail.' }
+    { key: 'vision', label: 'Vision et contact', help: 'Où en sera le projet dans 1 à 3 ans si vous obtenez le financement. Vos coordonnées (téléphone, e-mail, adresse) ne sont pas montrées aux partenaires avant la conclusion du marché.',
+      example: 'Dans trois ans : quarante kiosques dans deux villes.' }
   ];
 
   /* Ma fiche de présentation (une seule par bénéficiaire). */
@@ -167,8 +167,10 @@
   }
 
   /* ---------- Lecture d'une présentation (administrateur et partenaire) ---------- */
-  function readHtml(content, urls) {
-    return SECTIONS.map(function (s, i) {
+  /* Pour un partenaire, la rubrique « vision » (vision et contact) n'est jamais montrée. */
+  function readHtml(content, urls, pourPartenaire) {
+    var rubriques = SECTIONS.filter(function (s) { return !(pourPartenaire && s.key === 'vision'); });
+    return rubriques.map(function (s, i) {
       var text = String(content[s.key] || '').trim();
       var body = text ? '<p class="pre-wrap">' + esc(text) + '</p>' : '<p class="small muted">Non renseigné.</p>';
       var gallery = '';
@@ -260,7 +262,7 @@
     }));
     ui.modal('Présentation du projet',
       '<p class="small muted">Présentation rédigée par le bénéficiaire et vérifiée par l’administrateur de DarajaPlus.</p>' +
-      readHtml(res.content || {}, urls));
+      readHtml(res.content || {}, urls, true));
   }
 
   DP.presentation = { show: montrerPartenaire };

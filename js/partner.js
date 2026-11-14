@@ -227,7 +227,7 @@
   }
 
   /* Rubrique « Projets disponibles » : tous les projets validés (prêts, en cours, clôturés), avec leur statut.
-     Le partenaire voit l'identifiant du bénéficiaire, le projet, l'activité et ses photos. Jamais le profil. */
+     Le partenaire voit l'identifiant, la zone, le quartier et la rue du bénéficiaire, le projet, l'activité et ses photos. Jamais le profil ni ses coordonnées. */
   var CONN_ENDED = ['refused_admin', 'refused', 'closed', 'cancelled'];
 
   function projectCard(r) {
@@ -255,6 +255,9 @@
       '<div class="card-body">' +
         '<dl class="kv">' +
           '<dt>Bénéficiaire</dt><dd><strong>' + esc(r.beneficiary_identifiant || '—') + '</strong> ' + DP.ui.categoryBadge(r.category) + '</dd>' +
+          '<dt>Zone</dt><dd>' + esc(r.zone || 'Non précisée') + '</dd>' +
+          '<dt>Quartier</dt><dd>' + esc(r.quartier || 'Non précisé') + '</dd>' +
+          '<dt>Rue</dt><dd>' + esc(r.rue || 'Non encore attribuée') + '</dd>' +
           '<dt>Montant</dt><dd>' + DP.ui.money(r.amount, r.currency) + '</dd>' +
           '<dt>Secteur</dt><dd>' + esc(r.sector || '—') + '</dd>' +
           '<dt>Échéance</dt><dd>' + DP.ui.date(r.due_date) + '</dd>' +
@@ -277,7 +280,7 @@
     if (!p) { el.innerHTML = noPartnerHtml('Projets disponibles'); return; }
 
     el.innerHTML = DP.ui.header('Projets disponibles',
-        'Tous les projets validés par l’Administrateur, avec leur statut. Vous voyez l’identifiant du bénéficiaire, le projet et les photos de l’activité. Le nom, le téléphone, l’e-mail et l’adresse du bénéficiaire ne sont pas affichés.') +
+        'Tous les projets validés par l’Administrateur, avec leur statut. Vous voyez l’identifiant, la zone, le quartier et la rue du bénéficiaire, le projet et les photos de l’activité. Le nom, le téléphone, l’e-mail et l’adresse du bénéficiaire ne sont pas affichés.') +
       DP.ui.card('Filtres', '<form class="filters" id="f-filter">' +
         DP.ui.field({ name: 'sector', label: 'Secteur', placeholder: 'ex. commerce' }) +
         DP.ui.field({ name: 'currency', label: 'Devise', type: 'select', options: [['', 'Toutes'], ['USD', 'USD'], ['FC', 'FC']] }) +
