@@ -106,6 +106,7 @@ function fakeResponse(req, role, withData) {
   if (req.method() === 'OPTIONS') return { status: 204, body: '' };
   if (p === '/auth/v1/user') return { id: me.id, email: me.email, aud: 'authenticated' };
   if (p === '/rest/v1/rpc/admin_stats') return { comptes_en_attente: 2, bg: 1, bb: 3, ba: 5, hotes_actifs: 1, agents_actifs: 2, partenaires_actifs: 1, partenaires_en_attente: 0, ponts_a_valider: 1, ponts_en_cours: 0, resultats_a_valider: 0, dossiers_prets: 1, messages_non_lus: 0, commissions_simulees_fc: 0, commissions_simulees_usd: 0, visibilites_a_payer: 0 };
+  if (p === '/rest/v1/rpc/admin_utilisateurs_par_categorie') return { administrateur: 1, hotes: 2, agents: 1, bg: 1, bb: 3, ba: 5, attente: 4, partenaires: 1, autres: 0, total: 18 };
   if (p === '/rest/v1/rpc/agent_quota') return { bg: 1, bb: 2, ba: 3, total: 6, caps: { bg: 10, bb: 30, ba: 60, total: 100 }, free_offers_used: 1, free_offers_quota: 5 };
   if (p === '/rest/v1/rpc/refresh_visibility') return 2;
   if (p.indexOf('/rest/v1/rpc/') === 0) return {};

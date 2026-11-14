@@ -121,9 +121,39 @@
   }
 
   /* ---------- Vue générale ---------- */
+  /* Total des utilisateurs par catégorie : tous les comptes, sans exception ; chaque compte n’est compté qu’une fois. */
+  function repartitionUtilisateurs(u) {
+    var n = function (k) { return Number(u && u[k]) || 0; };
+    var lignes = [
+      { label: 'Administrateur', value: n('administrateur') },
+      { label: 'Hôtes', value: n('hotes') },
+      { label: 'Agents', value: n('agents') },
+      { label: 'Bg (Gamma)', value: n('bg') },
+      { label: 'Bb (Bêta)', value: n('bb') },
+      { label: 'Ba (Alpha)', value: n('ba') },
+      { label: 'En attente d’affectation (à un agent ou parrain)', value: n('attente') },
+      { label: 'Partenaires', value: n('partenaires') }
+    ];
+    if (n('autres')) lignes.push({ label: 'Autres (rôle non reconnu)', value: n('autres') });
+    lignes.push({ label: 'Total', value: n('total'), total: true });
+    return ui.table([
+      { label: 'Catégorie', render: function (l) { return l.total ? '<strong>' + esc(l.label) + '</strong>' : esc(l.label); } },
+      { label: 'Nombre', cls: 'num', render: function (l) { return l.total ? '<strong>' + l.value + '</strong>' : String(l.value); } }
+    ], lignes, 'Aucun utilisateur.') +
+      '<p class="small muted">Les comptes en attente de validation et les bénéficiaires pas encore affectés sont inclus.</p>';
+  }
+
   async function renderOverview(el) {
-    var s = await DP.api.rpc('admin_stats', {});
+    var r = await Promise.all([
+      DP.api.rpc('admin_stats', {}),
+      DP.api.rpc('admin_utilisateurs_par_categorie', {}).catch(function () { return null; })
+    ]);
+    var s = r[0];
+    var repartition = r[1]
+      ? repartitionUtilisateurs(r[1])
+      : ui.alert('warn', 'Le total des utilisateurs par catégorie n’a pas pu être chargé. Rechargez la page dans un instant.');
     el.innerHTML = ui.header('Vue générale', 'Situation de la plateforme et actions à traiter.') +
+      ui.card('Total utilisateurs par catégorie', repartition) +
       ui.stats([
         ['Comptes à valider', s.comptes_en_attente, 'Inscriptions en attente', s.comptes_en_attente ? 'warn' : ''],
         ['Bénéficiaires Bg', s.bg, 'Gamma (max 500)'],
