@@ -1069,6 +1069,223 @@
     });
   }
 
+  /* ---------- Affectations : placer un compte actif (Ba, Bb, Bg, Agent, Hôte) ---------- */
+  var CIBLE = [['ba', 'Bénéficiaire Ba — Alpha'], ['bb', 'Bénéficiaire Bb — Bêta'], ['bg', 'Bénéficiaire Bg — Gamma'], ['agent', 'Agent'], ['host', 'Hôte']];
+
+  /* Comptes actifs (Hôtes, Agents, bénéficiaires), toutes les fiches de bénéficiaires et les plafonds. */
+  async function affectationData() {
+    var r = await Promise.all([
+      DP.api.get('profiles', { select: 'id,role,status,code,prenom,nom,email,host_id,zone_id,quartier_id,identifiant,created_at', role: 'in.(host,agent,beneficiary)', status: 'eq.active', order: 'created_at.desc', limit: 5000 }),
+      DP.api.get('beneficiaries', { select: 'id,user_id,code,category,status,prenom,nom,agent_id,host_id,sponsor_id,quartier_id', limit: 5000 }),
+      DP.api.get('settings', { select: 'value', key: 'eq.caps' })
+    ]);
+    var ficheOf = {};
+    r[1].forEach(function (b) { if (b.user_id) ficheOf[b.user_id] = b; });
+    return { comptes: r[0], fiches: r[1], ficheOf: ficheOf, caps: (r[2][0] && r[2][0].value) || {} };
+  }
+
+  /* Un Hôte ou un Agent est toujours placé ; un bénéficiaire ne l’est qu’avec une catégorie. */
+  function estPlace(p, data) {
+    if (p.role !== 'beneficiary') return true;
+    var f = data.ficheOf[p.id];
+    return !!(f && f.category);
+  }
+
+  /* Personnes rattachées à ce compte : le serveur refuse tout changement de rôle ou de rattachement tant qu’il y en a. */
+  function nombreRattaches(p, data) {
+    if (p.role === 'host') return data.comptes.filter(function (x) { return x.role === 'agent' && x.host_id === p.id; }).length;
+    if (p.role === 'agent') return data.fiches.filter(function (b) { return b.agent_id === p.id; }).length;
+    var f = data.ficheOf[p.id];
+    return f && f.category ? data.fiches.filter(function (b) { return b.sponsor_id === f.id; }).length : 0;
+  }
+
+  /* Fenêtre d’affectation : le choix « Affecter comme » fait apparaître les champs utiles (zone, Hôte, Agent, quartier, parrain). */
+  function openAffectation(p, data, lk) {
+    if (!p) return;
+    var zmap = byId(lk.zones);
+    var caps = data.caps || {};
+    var f = data.ficheOf[p.id] || null;
+    var zname = function (id) { return zmap[id] ? zmap[id].name : '—'; };
+    var capTxt = function (k) { return caps[k] != null ? String(caps[k]) : ''; };
+    var courant = p.role === 'host' ? 'host' : p.role === 'agent' ? 'agent' : (f && f.category) || '';
+    var situation = p.role === 'host' ? 'Hôte' : p.role === 'agent' ? 'Agent' : (f && f.category ? DP.labels.category[f.category] : 'En attente de catégorie');
+    var n = nombreRattaches(p, data);
+
+    var info = '<dl class="kv"><dt>Nom</dt><dd>' + esc(pname(p)) + '</dd>' +
+      '<dt>Identifiant</dt><dd>' + esc(p.identifiant || '—') + '</dd>' +
+      '<dt>Situation actuelle</dt><dd>' + esc(situation) + (p.code ? ' — ' + esc(p.code) : '') + '</dd></dl>';
+    var avert = n ? ui.alert('warn', '<strong>' + n + ' personne(s) rattachée(s).</strong> Tant qu’elles ne sont pas réaffectées, ce compte ne peut pas changer de rôle ni de rattachement.') : '';
+
+    var m = ui.modal('Affecter ou classer', info + avert +
+      '<form class="form" id="af">' +
+      ui.field({ name: 'cible', label: 'Affecter comme', type: 'select', options: CIBLE, value: courant, placeholder: 'Choisir', required: true, dataType: 'nullable' }) +
+      '<div id="af-champs" style="display:contents"></div>' +
+      '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer l’affectation</button></div></form>');
+    var form = m.el.querySelector('#af');
+    var champs = m.el.querySelector('#af-champs');
+
+    function htmlChamps(cible) {
+      if (!cible) return '';
+      if (cible === 'host') {
+        var prises = lk.hosts.filter(function (h) {
+          return h.id !== p.id && h.zone_id && (h.status === 'active' || h.status === 'suspended');
+        }).map(function (h) { return h.zone_id; });
+        var libres = lk.zones.filter(function (z) {
+          return prises.indexOf(z.id) === -1 && !(p.role === 'host' && z.id === p.zone_id);
+        }).map(function (z) { return [z.id, z.name]; });
+        return ui.field({ name: 'zone', label: 'Zone attribuée', type: 'select', options: libres, placeholder: 'Choisir une zone', required: true, dataType: 'nullable',
+          hint: libres.length ? 'Une seule Hôte par zone : seules les zones libres sont proposées.' : 'Toutes les zones ont déjà un Hôte.' });
+      }
+      if (cible === 'agent') {
+        var hotes = lk.hosts.filter(function (h) { return h.status === 'active' && h.id !== p.id; }).map(function (h) {
+          return [h.id, zname(h.zone_id) + ' — ' + pname(h) + ' (' + (h.code || '') + ')'];
+        });
+        return ui.field({ name: 'host', label: 'Hôte encadrant', type: 'select', options: hotes, placeholder: 'Choisir un Hôte actif', required: true, dataType: 'nullable',
+          hint: capTxt('agents_per_host') ? 'Un Hôte encadre au maximum ' + capTxt('agents_per_host') + ' Agents.' : '' }) +
+          ui.field({ name: 'quartier', label: 'Quartier de rattachement', type: 'select', options: [], placeholder: 'Choisir l’Hôte d’abord', dataType: 'nullable',
+            hint: 'Facultatif. Quartiers de la zone de l’Hôte.' });
+      }
+      /* Ba, Bb, Bg : Agent, quartier et, sauf Gamma, parrain du même Agent. */
+      var agents = lk.agents.filter(function (a) { return a.id !== p.id; }).map(function (a) {
+        return [a.id, pname(a) + ' (' + (a.code || '') + ') — ' + zname(a.zone_id)];
+      });
+      var html = ui.field({ name: 'agent', label: 'Agent de rattachement', type: 'select', options: agents, placeholder: 'Choisir un Agent actif', required: true, dataType: 'nullable' }) +
+        ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: [], placeholder: 'Choisir l’Agent d’abord', dataType: 'nullable', hint: 'Facultatif.' });
+      if (cible !== 'bg') {
+        html += ui.field({ name: 'sponsor', label: cible === 'bb' ? 'Parrain (Gamma)' : 'Parrain (Bêta)', type: 'select', options: [],
+          placeholder: 'Choisir l’Agent d’abord', required: true, dataType: 'nullable',
+          hint: cible === 'bb' ? (capTxt('bb_per_bg') ? 'Un Gamma parraine au maximum ' + capTxt('bb_per_bg') + ' Bêta.' : '')
+                               : (capTxt('ba_per_bb') ? 'Un Bêta parraine au maximum ' + capTxt('ba_per_bb') + ' Alpha.' : '') });
+      }
+      return html;
+    }
+
+    /* Listes dépendantes : quartiers selon l’Hôte ou l’Agent, parrains selon l’Agent et la catégorie. */
+    function cabler(cible) {
+      if (!cible || cible === 'host') return;
+      var F = form.elements;
+      if (cible === 'agent') {
+        F.host.addEventListener('change', function () {
+          var h = lk.hosts.find(function (x) { return String(x.id) === F.host.value; });
+          F.quartier.innerHTML = options(h ? quartiersOfZone(lk, h.zone_id) : [], '', 'Aucun quartier précis');
+        });
+        return;
+      }
+      F.agent.addEventListener('change', function () {
+        var a = lk.agents.find(function (x) { return String(x.id) === F.agent.value; });
+        F.quartier.innerHTML = options(a ? quartiersOfZone(lk, a.zone_id) : [], '', 'Aucun quartier précis');
+        if (F.sponsor) {
+          var besoin = cible === 'bb' ? 'bg' : 'bb';
+          var candidats = data.fiches.filter(function (b) {
+            return b.status === 'active' && b.category === besoin && b.agent_id === F.agent.value && !(f && b.id === f.id);
+          }).map(function (b) { return [b.id, (b.code || '—') + ' — ' + bname(b)]; });
+          F.sponsor.innerHTML = options(candidats, '', candidats.length ? 'Choisir un parrain' : 'Aucun parrain disponible pour cet Agent');
+        }
+      });
+    }
+
+    function rendreChamps(cible) {
+      champs.innerHTML = htmlChamps(cible);
+      cabler(cible);
+      var F = form.elements;
+      /* Valeurs actuelles préremplies, pour ne pas tout ressaisir. */
+      if (cible === 'agent' && p.role === 'agent' && p.host_id) {
+        F.host.value = p.host_id;
+        F.host.dispatchEvent(new Event('change'));
+        F.quartier.value = p.quartier_id || '';
+      }
+      if (f && f.category && cible === f.category && f.agent_id) {
+        F.agent.value = f.agent_id;
+        F.agent.dispatchEvent(new Event('change'));
+        F.quartier.value = f.quartier_id || '';
+        if (F.sponsor) F.sponsor.value = f.sponsor_id || '';
+      }
+    }
+
+    form.elements.cible.addEventListener('change', function () { rendreChamps(form.elements.cible.value); });
+    rendreChamps(courant);
+
+    ui.bindForm(form, async function (d) {
+      var c = d.cible;
+      if (!c) throw new Error('Choisissez une affectation.');
+      var payload = { p_profile: p.id, p_cible: c, p_zone: null, p_host: null, p_agent: null, p_quartier: null, p_sponsor: null };
+      if (c === 'host') {
+        if (!d.zone) throw new Error('Choisissez la zone de l’Hôte.');
+        payload.p_zone = Number(d.zone);
+      } else if (c === 'agent') {
+        if (!d.host) throw new Error('Choisissez l’Hôte encadrant.');
+        payload.p_host = d.host;
+        payload.p_quartier = d.quartier ? Number(d.quartier) : null;
+      } else {
+        if (!d.agent) throw new Error('Choisissez l’Agent de rattachement.');
+        if (c !== 'bg' && !d.sponsor) throw new Error('Choisissez le parrain.');
+        payload.p_agent = d.agent;
+        payload.p_quartier = d.quartier ? Number(d.quartier) : null;
+        payload.p_sponsor = c === 'bg' ? null : d.sponsor;
+      }
+      /* Modifier une personne déjà placée peut changer son code : on demande confirmation. */
+      if (estPlace(p, data) && !(await ui.confirm('Modifier l’affectation de ' + pname(p) + ' ? Son code peut changer, et elle en sera informée.', 'Modifier'))) return false;
+      await DP.api.rpc('admin_affecter', payload);
+      m.close();
+      refresh();
+      return 'Affectation enregistrée.';
+    }, null);
+  }
+
+  async function renderAffectations(el, ctx) {
+    var vue = (ctx.query && ctx.query.get('vue')) || 'attente';
+    var r = await Promise.all([
+      lookups(),
+      affectationData(),
+      DP.api.get('profiles', { select: 'id', role: 'in.(host,agent,beneficiary)', status: 'eq.pending', limit: 500 })
+    ]);
+    var lk = r[0], data = r[1], enAttente = r[2];
+    var par = byId(data.comptes);
+    var zmap = byId(lk.zones);
+    var zname = function (id) { return zmap[id] ? zmap[id].name : '—'; };
+    var nAttente = data.comptes.filter(function (p) { return !estPlace(p, data); }).length;
+    var rows = vue === 'tous' ? data.comptes : data.comptes.filter(function (p) { return !estPlace(p, data); });
+
+    function situation(p) {
+      if (p.role === 'host') return 'Hôte — ' + zname(p.zone_id);
+      if (p.role === 'agent') return 'Agent';
+      var f = data.ficheOf[p.id];
+      return f && f.category ? DP.labels.category[f.category] : null;
+    }
+    function rattachement(p) {
+      var r = null;
+      if (p.role === 'agent') r = par[p.host_id];
+      else if (p.role === 'beneficiary' && data.ficheOf[p.id]) r = par[data.ficheOf[p.id].agent_id];
+      return r ? pname(r) : '—';
+    }
+    var nom = { label: 'Nom', render: function (p) { return '<strong>' + esc(pname(p)) + '</strong>' + (p.identifiant ? '<div class="small muted">' + esc(p.identifiant) + '</div>' : ''); } };
+    var colonnes = vue === 'tous' ? [
+      nom,
+      { label: 'Rôle', render: function (p) { return esc(DP.labels.role[p.role] || p.role); } },
+      { label: 'Situation', render: function (p) { var s = situation(p); return s ? esc(s) : '<span class="badge badge-warn">En attente de catégorie</span>'; } },
+      { label: 'Code', render: function (p) { return esc(p.code || (data.ficheOf[p.id] && data.ficheOf[p.id].code) || '—'); } },
+      { label: 'Rattaché à', render: function (p) { return esc(rattachement(p)); } },
+      { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-outline" type="button" data-affecter="' + esc(p.id) + '">Modifier</button>'; } }
+    ] : [
+      nom,
+      { label: 'Inscrit le', render: function (p) { return ui.date(p.created_at); } },
+      { label: 'Situation', render: function (p) { return '<span class="badge badge-warn">En attente de catégorie</span>'; } },
+      { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-primary" type="button" data-affecter="' + esc(p.id) + '">Affecter</button>'; } }
+    ];
+    var tabs = [['attente', 'À affecter (' + nAttente + ')'], ['tous', 'Tous les comptes actifs']];
+    var alerte = enAttente.length ? ui.alert('info', '<strong>' + enAttente.length + ' compte(s) en attente de validation.</strong> ' +
+      'Ils reçoivent leur affectation au moment de la validation, dans <a href="#/admin/comptes">Comptes à valider</a>.') : '';
+
+    el.innerHTML = ui.header('Affectations', 'Placez les comptes actifs : bénéficiaire (Ba, Bb ou Bg), Agent ou Hôte. Le serveur vérifie chaque règle : quotas, parrains, zones.') +
+      alerte +
+      '<div class="tabs" role="tablist">' + tabs.map(function (t) {
+        return '<a class="tab' + (t[0] === vue ? ' active' : '') + '" href="#/admin/affectations?vue=' + t[0] + '">' + esc(t[1]) + '</a>';
+      }).join('') + '</div>' +
+      ui.card(null, ui.table(colonnes, rows, vue === 'tous' ? 'Aucun compte actif.' : 'Aucun bénéficiaire en attente d’affectation.'));
+
+    act(el, '[data-affecter]', function (b) { return openAffectation(par[b.dataset.affecter], data, lk); });
+  }
+
   /* ---------- Routes ---------- */
   DP.register([
     { path: '/admin', roles: ROLE, title: 'Vue générale', render: renderOverview },
@@ -1076,6 +1293,7 @@
     { path: '/admin/hotes', roles: ROLE, title: 'Hôtes et zones', render: renderHosts },
     { path: '/admin/agents', roles: ROLE, title: 'Agents', render: renderAgents },
     { path: '/admin/beneficiaires', roles: ROLE, title: 'Bénéficiaires', render: renderBeneficiaries },
+    { path: '/admin/affectations', roles: ROLE, title: 'Affectations', render: renderAffectations },
     { path: '/admin/partenaires', roles: ROLE, title: 'Partenaires', render: renderPartners },
     { path: '/admin/projets', roles: ROLE, title: 'Projets et besoins', render: renderProjects },
     { path: '/admin/ponts', roles: ROLE, title: 'Ponts — mises en relation', render: renderPonts },
