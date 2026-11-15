@@ -136,11 +136,38 @@
   };
 
   /* ---------- Messagerie privée (utilisateur <-> Administrateur uniquement) ---------- */
+  /* Accusé d’un message envoyé :
+     Envoyé = enregistré sur la plateforme ; Reçu = l’application du destinataire l’a récupéré ; Lu = le destinataire a ouvert le fil. */
+  function etatMessage(m) {
+    var autreLu = m.from_admin ? m.read_by_user : m.read_by_admin;
+    if (autreLu) return '<span class="small"><strong>✓✓ Lu</strong>' + (m.read_at ? ' le ' + DP.ui.dateTime(m.read_at) : '') + '</span>';
+    if (m.delivered_at) return '<span class="small muted">✓✓ Reçu le ' + DP.ui.dateTime(m.delivered_at) + '</span>';
+    return '<span class="small muted">✓ Envoyé</span>';
+  }
   function bubble(m, isAdmin, title) {
     var mine = isAdmin ? !!m.from_admin : !m.from_admin;
     var who = mine ? 'Vous' : (m.from_admin ? 'Administrateur général' : (title || 'Utilisateur'));
     return '<div class="bubble ' + (mine ? 'me' : 'them') + '"><div class="bubble-who">' + esc(who) + ' · ' + DP.ui.dateTime(m.created_at) +
-      '</div><div class="bubble-body">' + esc(m.body).replace(/\n/g, '<br>') + '</div></div>';
+      '</div><div class="bubble-body">' + esc(m.body).replace(/\n/g, '<br>') + '</div>' +
+      (mine ? '<div class="bubble-etat" data-etat="' + esc(m.id) + '">' + etatMessage(m) + '</div>' : '') + '</div>';
+  }
+
+  /* Les accusés changent sans recharger la page : mise à jour toutes les 30 secondes, tant que le fil est affiché. */
+  function suivreEtats(el, userId, isAdmin) {
+    if (el._etatsTimer) clearInterval(el._etatsTimer);
+    el._etatsTimer = setInterval(async function () {
+      if (!el.isConnected) { clearInterval(el._etatsTimer); return; }
+      try {
+        var rows = await DP.api.get('messages', {
+          select: 'id,from_admin,read_by_admin,read_by_user,read_at,delivered_at',
+          thread_user_id: 'eq.' + userId, from_admin: 'eq.' + (isAdmin ? 'true' : 'false'), limit: 300
+        });
+        rows.forEach(function (m) {
+          var cible = el.querySelector('[data-etat="' + m.id + '"]');
+          if (cible) cible.innerHTML = etatMessage(m);
+        });
+      } catch (e) { /* hors ligne : nouvelle tentative au prochain tour */ }
+    }, 30000);
   }
 
   DP.messages = {
@@ -150,10 +177,9 @@
       var isAdmin = DP.app.isAdmin();
       var me = DP.api.uid;
       var msgs = await DP.api.get('messages', { select: '*', thread_user_id: 'eq.' + userId, order: 'created_at.asc', limit: 300 });
-      try {
-        if (isAdmin) await DP.api.update('messages', { thread_user_id: 'eq.' + userId, from_admin: 'eq.false', read_by_admin: 'eq.false' }, { read_by_admin: true });
-        else await DP.api.update('messages', { thread_user_id: 'eq.' + userId, from_admin: 'eq.true', read_by_user: 'eq.false' }, { read_by_user: true });
-      } catch (e) { /* lecture non bloquante */ }
+      /* Fil ouvert : les messages reçus sont marqués comme reçus puis lus, côté serveur (non bloquant). */
+      DP.api.rpc('marquer_messages_recus').catch(function () { /* non bloquant */ });
+      DP.api.rpc('marquer_messages_lus', { p_thread_user_id: userId }).catch(function () { /* non bloquant */ });
       el.innerHTML = (opts.header || '') +
         '<div class="card"><div class="card-body"><div class="thread" aria-live="polite">' +
         (msgs.length ? msgs.map(function (m) { return bubble(m, isAdmin, opts.title); }).join('') :
@@ -166,6 +192,7 @@
         '<div class="form-actions"><button type="submit" class="btn btn-primary">Envoyer</button></div></form></div></div>';
       var box = el.querySelector('.thread');
       if (box) box.scrollTop = box.scrollHeight;
+      suivreEtats(el, userId, isAdmin);
       var form = el.querySelector('.thread-form');
       DP.ui.bindForm(form, async function (data) {
         if (!data.body) throw new Error('Le message est vide.');
@@ -531,6 +558,7 @@
   function signalerPresence() {
     if (!DP.api.uid) return;
     DP.api.rpc('marquer_presence').catch(function () { /* hors ligne ou compte non actif : ignoré */ });
+    DP.api.rpc('marquer_messages_recus').catch(function () { /* hors ligne : ignoré */ });
   }
   function demarrerPresence() {
     if (presenceTimer) return;
