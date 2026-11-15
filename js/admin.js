@@ -1006,7 +1006,18 @@
     var list = Object.keys(threads).map(function (k) { return threads[k]; });
     var people = await profilesFor(list.map(function (t) { return t.id; }));
     list.sort(function (a, b) { return a.last.created_at < b.last.created_at ? 1 : -1; });
+    /* Suivi des envois à tous les comptes actifs : combien de personnes ont lu. Hors ligne ou ancienne base : liste vide. */
+    var envois = await DP.api.rpc('lecture_envois_admin').catch(function () { return []; });
+    envois = Array.isArray(envois) ? envois : [];
     el.innerHTML = ui.header('Messages privés', 'Échanges privés entre l’Administrateur général et chaque utilisateur. Aucun message direct entre comptes.') +
+      ui.card('Envois à tous les comptes actifs', ui.table([
+        { label: 'Message', render: function (e) { return '<strong>' + esc(e.titre) + '</strong><div class="small muted">' + esc(short(e.texte, 100)) + '</div>'; } },
+        { label: 'Envoyé le', render: function (e) { return ui.dateTime(e.envoye_le); } },
+        { label: 'Lu par', render: function (e) {
+          var pct = e.destinataires ? Math.round(e.lus * 100 / e.destinataires) : 0;
+          return '<strong>' + e.lus + ' sur ' + e.destinataires + '</strong> <span class="small muted">(' + pct + ' %)</span>';
+        } }
+      ], envois, 'Aucun envoi à tous les comptes actifs pour le moment.')) +
       ui.card(null, ui.table([
         { label: 'Utilisateur', render: function (t) {
           var p = people[t.id];
