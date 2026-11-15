@@ -229,17 +229,39 @@
     });
   }
 
+  /* Recherche d’un utilisateur : nom, identifiant, code, e-mail ou téléphone, tous statuts confondus.
+     Chaque mot doit correspondre à l’un de ces champs ; les caractères spéciaux sont retirés. */
+  function termesRecherche(q) {
+    return String(q || '').replace(/[,()*"\\%_]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 3).map(function (t) { return t.slice(0, 40); });
+  }
+  function rechercherComptes(termes) {
+    var groupes = termes.map(function (t) {
+      return 'or(prenom.ilike.*' + t + '*,nom.ilike.*' + t + '*,identifiant.ilike.*' + t + '*,code.ilike.*' + t + '*,email.ilike.*' + t + '*,phone.ilike.*' + t + '*)';
+    });
+    return DP.api.get('profiles', { select: '*', role: 'neq.admin', and: '(' + groupes.join(',') + ')', order: 'created_at.desc', limit: 100 });
+  }
+
   async function renderAccounts(el, ctx) {
     var filter = (ctx.query && ctx.query.get('statut')) || 'pending';
+    var q = String((ctx.query && ctx.query.get('q')) || '').trim();
+    var termes = termesRecherche(q);
     var tabs = [['pending', 'En attente'], ['active', 'Actifs'], ['suspended', 'Suspendus'], ['rejected', 'Refusés']];
-    var rows = await DP.api.get('profiles', { select: '*', status: 'eq.' + filter, role: 'neq.admin', order: 'created_at.desc', limit: 500 });
+    var rows = termes.length ? await rechercherComptes(termes) : await DP.api.get('profiles', { select: '*', status: 'eq.' + filter, role: 'neq.admin', order: 'created_at.desc', limit: 500 });
     var map = byId(rows);
     var lk = await lookups();
+    var recherche = ui.card(null, '<form class="form" id="recherche-comptes" role="search">' +
+      '<div class="field field-full"><label for="q-comptes">Rechercher un utilisateur</label>' +
+      '<input id="q-comptes" name="q" class="input" type="search" value="' + esc(q) + '" autocomplete="off" placeholder="Nom, identifiant (DP-000010), code (AH1A1Bg1), e-mail ou téléphone"></div>' +
+      '<div class="form-actions"><button class="btn btn-primary" type="submit">Rechercher</button>' +
+      (q ? ' <a class="btn btn-outline" href="#/admin/comptes">Effacer</a>' : '') + '</div></form>');
     el.innerHTML = ui.header('Comptes à valider', 'Chaque inscription est validée ou refusée par l’Administrateur général. Un refus exige un motif, visible par la personne.') +
+      recherche +
+      (termes.length ? ui.alert('info', '<strong>' + rows.length + ' compte(s)</strong> trouvé(s) pour « ' + esc(q) + ' », tous statuts confondus.' +
+        (rows.length >= 100 ? ' Seuls les 100 premiers sont affichés : précisez la recherche.' : '')) :
       '<div class="tabs" role="tablist">' + tabs.map(function (t) {
         return '<a class="tab' + (t[0] === filter ? ' active' : '') + '" href="#/admin/comptes?statut=' + t[0] + '">' + esc(t[1]) + '</a>';
-      }).join('') + '</div>' +
-      (filter === 'active' ? ui.card(null, '<div class="btn-row"><button class="btn btn-primary" type="button" data-ecrire-actifs>Écrire aux comptes actifs</button></div>' +
+      }).join('') + '</div>') +
+      (!termes.length && filter === 'active' ? ui.card(null, '<div class="btn-row"><button class="btn btn-primary" type="button" data-ecrire-actifs>Écrire aux comptes actifs</button></div>' +
         '<p class="small muted">Le message arrive dans les notifications de chaque compte actif, avec une alerte sur téléphone si elle est activée. Votre compte n’est pas inclus.</p>') : '') +
       ui.card(null, ui.table([
         { label: 'Nom', render: function (p) { return '<strong>' + esc(pname(p)) + '</strong>' + (p.identifiant ? ' <span class="small muted">' + esc(p.identifiant) + '</span>' : '') + (p.code ? '<div class="small muted">' + esc(p.code) + '</div>' : ''); } },
@@ -251,9 +273,15 @@
         { label: 'Validé le', render: function (p) { return p.validated_at ? ui.dateTime(p.validated_at) : '—'; } },
         { label: 'Motif de refus', render: function (p) { return esc(short(p.rejection_reason, 80) || '—'); } },
         { label: 'Action', cls: 'actions', render: actionsForAccount }
-      ], rows, 'Aucun compte dans cette catégorie.'));
+      ], rows, termes.length ? 'Aucun compte ne correspond à cette recherche.' : 'Aucun compte dans cette catégorie.'));
 
     act(el, '[data-review]', function (b) { return openReview(map[b.dataset.review], lk); });
+    var formRecherche = el.querySelector('#recherche-comptes');
+    if (formRecherche) formRecherche.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var v = String(formRecherche.querySelector('input[name=q]').value || '').trim();
+      location.hash = '#/admin/comptes' + (v ? '?q=' + encodeURIComponent(v) : '');
+    });
     act(el, '[data-ecrire-actifs]', function () { openMessageActifs(); });
     act(el, '[data-quick-approve]', async function (b) {
       var p = map[b.dataset.quickApprove];
