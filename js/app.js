@@ -230,24 +230,29 @@
   ];
   var NOTIF_AUTRES = { key: 'autres', label: 'Autres', kinds: [] };
 
-  /* Une carte par catégorie, seulement si elle contient des notifications, dans l’ordre ci-dessus. */
+  /* Une rubrique par catégorie, seulement si elle contient des notifications, dans l’ordre ci-dessus.
+     Chaque rubrique est fermée au départ : on l’ouvre pour lire ses notifications. Son en-tête indique
+     le nombre de notifications non lues. L’état ouvert/fermé est gardé pendant la session. */
+  var notifOuvertes = {};
   function notifGroupes(rows, role) {
     var groupes = {};
     rows.forEach(function (n) {
       var cat = NOTIF_CATEGORIES.filter(function (c) { return c.kinds.indexOf(n.kind) !== -1; })[0] || NOTIF_AUTRES;
       (groupes[cat.key] = groupes[cat.key] || { cat: cat, items: [] }).items.push(n);
     });
-    return NOTIF_CATEGORIES.concat([NOTIF_AUTRES]).filter(function (c) { return groupes[c.key]; }).map(function (c) {
+    return '<div class="notif-rubriques">' + NOTIF_CATEGORIES.concat([NOTIF_AUTRES]).filter(function (c) { return groupes[c.key]; }).map(function (c) {
       var g = groupes[c.key];
       var nonLues = g.items.filter(function (n) { return !n.read_at; }).length;
-      return DP.ui.card(c.label + (nonLues ? ' · ' + nonLues + ' non lue(s)' : ''),
+      var etat = nonLues ? '<span class="badge badge-warn">' + nonLues + ' non lue(s)</span>' : '<span class="badge badge-muted">Tout est lu</span>';
+      return '<details class="notif-rubrique' + (nonLues ? ' a-lire' : '') + '" data-rubrique="' + esc(c.key) + '"' + (notifOuvertes[c.key] ? ' open' : '') + '>' +
+        '<summary><span class="notif-titre">' + esc(c.label) + ' <span class="small muted">(' + g.items.length + ')</span></span>' + etat + '</summary>' +
         '<ul class="notif-list">' + g.items.map(function (n) {
           return '<li class="notif' + (n.read_at ? '' : ' unread') + '"><div class="notif-main"><strong>' + esc(n.title) + '</strong>' +
             (n.body ? '<div class="small">' + esc(n.body) + '</div>' : '') +
             '<div class="small muted">' + DP.ui.dateTime(n.created_at) + '</div></div>' +
             '<a class="btn btn-sm btn-outline" href="' + esc(resolveLink(n.link, role)) + '" data-mark="' + esc(n.id) + '">Ouvrir</a></li>';
-        }).join('') + '</ul>');
-    }).join('');
+        }).join('') + '</ul></details>';
+    }).join('') + '</div>';
   }
 
   DP.register([
@@ -260,6 +265,9 @@
         el.innerHTML = DP.ui.header('Notifications', unread ? unread + ' non lue(s)' : 'Tout est lu',
           unread ? '<button class="btn btn-outline" type="button" data-read-all>Tout marquer comme lu</button>' : '') +
           (rows.length ? notifGroupes(rows, role) : DP.ui.card(null, DP.ui.empty('Aucune notification pour le moment.')));
+        el.querySelectorAll('details[data-rubrique]').forEach(function (d) {
+          d.addEventListener('toggle', function () { notifOuvertes[d.dataset.rubrique] = d.open; });
+        });
         el.querySelectorAll('[data-mark]').forEach(function (a) {
           a.addEventListener('click', async function () {
             try { await DP.api.update('notifications', { id: 'eq.' + a.dataset.mark }, { read_at: new Date().toISOString() }); } catch (e) { /* ignoré */ }

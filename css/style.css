@@ -191,6 +191,17 @@ textarea.input { min-height: 96px; resize: vertical; }
 .notif { display: flex; justify-content: space-between; gap: .75rem; align-items: center; padding: .75rem 0; border-bottom: 1px solid var(--line); }
 .notif.unread { background: #fffdf0; }
 .notif-main { min-width: 0; }
+/* Rubriques de notifications : une par catégorie, fermée au départ, à ouvrir. */
+.notif-rubriques { display: grid; gap: .6rem; margin-bottom: 1rem; }
+.notif-rubrique { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); min-width: 0; }
+.notif-rubrique.a-lire { border-color: #fcd34d; }
+.notif-rubrique > summary { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; padding: .85rem 1rem; cursor: pointer; font-weight: 600; list-style: none; }
+.notif-rubrique > summary::-webkit-details-marker { display: none; }
+.notif-rubrique > summary::before { content: '▸'; display: inline-block; margin-right: .4rem; color: var(--muted); transition: transform .15s; }
+.notif-rubrique[open] > summary::before { transform: rotate(90deg); }
+.notif-rubrique > summary:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+.notif-titre { flex: 1 1 auto; min-width: 0; }
+.notif-rubrique > .notif-list { padding: 0 1rem .4rem; }
 .thread { display: flex; flex-direction: column; gap: .6rem; max-height: 480px; overflow-y: auto; padding: .25rem; margin-bottom: 1rem; }
 .bubble { max-width: 82%; padding: .55rem .75rem; border-radius: 12px; background: #f3f4f6; }
 .bubble.me { align-self: flex-end; background: var(--green-soft); }
