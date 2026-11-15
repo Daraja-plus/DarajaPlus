@@ -249,14 +249,19 @@
       ui.card('Nouvelle annonce de zone', '<form class="form" id="f-ann">' +
         ui.field({ name: 'title', label: 'Titre', required: true, full: true }) +
         ui.field({ name: 'body', label: 'Message', type: 'textarea', rows: 5, required: true, full: true, hint: 'Visible par les bénéficiaires de la zone. Pas de données personnelles.' }) +
+        DP.photo.html({ mode: 'form', compact: true, label: 'Photo (facultatif — JPG, PNG ou WebP, 3 Mo maximum)' }) +
         '<div class="form-actions"><button class="btn btn-primary" type="submit">Publier pour ma zone</button></div></form>') +
       ui.card('Mes annonces', ui.table([
-        { label: 'Annonce', render: function (a) { return '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
+        { label: 'Annonce', render: function (a) { return DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-thumb') + '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
         { label: 'Date', render: function (a) { return ui.date(a.created_at); } },
         { label: 'Statut', render: function (a) { return ui.badge(a.status === 'visible' ? 'published' : 'hidden'); } }
       ], rows, 'Aucune annonce publiée.')) + '</div>';
+    DP.photo.hydrate(el);
+    var photo = DP.photo.bind(el.querySelector('#f-ann'), { mode: 'form' });
     ui.bindForm(el.querySelector('#f-ann'), async function (d) {
-      await DP.api.insert('announcements', { author_id: DP.api.uid, audience: 'zone', zone_id: me.zone_id, title: d.title, body: d.body, status: 'visible' });
+      await DP.photo.sendWith(photo, 'annonces', 'annonce-', function (chemin) {
+        return DP.api.insert('announcements', { author_id: DP.api.uid, audience: 'zone', zone_id: me.zone_id, title: d.title, body: d.body, status: 'visible', photo_path: chemin });
+      });
       refresh();
       return 'Annonce publiée pour votre zone.';
     });
@@ -579,13 +584,18 @@
       ui.card('Nouvelle annonce', '<form class="form" id="f-ann">' +
         ui.field({ name: 'title', label: 'Titre', required: true, full: true }) +
         ui.field({ name: 'body', label: 'Message', type: 'textarea', rows: 5, required: true, full: true }) +
+        DP.photo.html({ mode: 'form', compact: true, label: 'Photo (facultatif — JPG, PNG ou WebP, 3 Mo maximum)' }) +
         '<div class="form-actions"><button class="btn btn-primary" type="submit">Publier</button></div></form>') +
       ui.card('Mes annonces', ui.table([
-        { label: 'Annonce', render: function (a) { return '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
+        { label: 'Annonce', render: function (a) { return DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-thumb') + '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
         { label: 'Date', render: function (a) { return ui.date(a.created_at); } }
       ], rows, 'Aucune annonce publiée.')) + '</div>';
+    DP.photo.hydrate(el);
+    var photo = DP.photo.bind(el.querySelector('#f-ann'), { mode: 'form' });
     ui.bindForm(el.querySelector('#f-ann'), async function (d) {
-      await DP.api.insert('announcements', { author_id: DP.api.uid, audience: 'agent_beneficiaries', agent_id: me.id, title: d.title, body: d.body, status: 'visible' });
+      await DP.photo.sendWith(photo, 'annonces', 'annonce-', function (chemin) {
+        return DP.api.insert('announcements', { author_id: DP.api.uid, audience: 'agent_beneficiaries', agent_id: me.id, title: d.title, body: d.body, status: 'visible', photo_path: chemin });
+      });
       refresh();
       return 'Annonce publiée.';
     });

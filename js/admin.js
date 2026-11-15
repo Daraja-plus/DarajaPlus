@@ -891,9 +891,10 @@
         ui.field({ name: 'audience', label: 'Destinataires', type: 'select', required: true, options: [['all', 'Toute la plateforme'], ['zone', 'Une zone'], ['agent_beneficiaries', 'Les bénéficiaires d’un Agent']] }) +
         ui.field({ name: 'zone_id', label: 'Zone (si « Une zone »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: zones.map(function (z) { return [z.id, z.name]; }) }) +
         ui.field({ name: 'agent_id', label: 'Agent (si « Bénéficiaires d’un Agent »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: agents.map(function (a) { return [a.id, (a.code || '') + ' — ' + pname(a)]; }) }) +
+        DP.photo.html({ mode: 'form', compact: true, label: 'Photo (facultatif — JPG, PNG ou WebP, 3 Mo maximum)' }) +
         '<div class="form-actions"><button class="btn btn-primary" type="submit">Publier</button></div></form>') +
       ui.card('Annonces publiées', ui.table([
-        { label: 'Annonce', render: function (a) { return '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
+        { label: 'Annonce', render: function (a) { return DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-thumb') + '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
         { label: 'Destinataires', render: function (a) {
           if (a.audience === 'zone') return 'Zone ' + esc(zmap[a.zone_id] ? zmap[a.zone_id].name : '');
           if (a.audience === 'agent_beneficiaries') return 'Bénéficiaires d’un Agent';
@@ -906,14 +907,19 @@
             (a.status === 'visible' ? 'Masquer' : 'Afficher') + '</button>';
         } }
       ], rows, 'Aucune annonce pour le moment.')) + '</div>';
+    DP.photo.hydrate(el);
 
+    var photo = DP.photo.bind(el.querySelector('#f-ann'), { mode: 'form' });
     ui.bindForm(el.querySelector('#f-ann'), async function (d) {
       if (d.audience === 'zone' && !d.zone_id) throw new Error('Choisissez la zone destinataire.');
       if (d.audience === 'agent_beneficiaries' && !d.agent_id) throw new Error('Choisissez l’Agent destinataire.');
-      await DP.api.insert('announcements', {
-        author_id: DP.api.uid, audience: d.audience, title: d.title, body: d.body, status: 'visible',
-        zone_id: d.audience === 'zone' ? Number(d.zone_id) : null,
-        agent_id: d.audience === 'agent_beneficiaries' ? d.agent_id : null
+      await DP.photo.sendWith(photo, 'annonces', 'annonce-', function (chemin) {
+        return DP.api.insert('announcements', {
+          author_id: DP.api.uid, audience: d.audience, title: d.title, body: d.body, status: 'visible',
+          zone_id: d.audience === 'zone' ? Number(d.zone_id) : null,
+          agent_id: d.audience === 'agent_beneficiaries' ? d.agent_id : null,
+          photo_path: chemin
+        });
       });
       refresh();
       return 'Annonce publiée.';

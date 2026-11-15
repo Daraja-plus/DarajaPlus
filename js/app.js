@@ -144,11 +144,15 @@
     if (m.delivered_at) return '<span class="small muted">✓✓ Reçu le ' + DP.ui.dateTime(m.delivered_at) + '</span>';
     return '<span class="small muted">✓ Envoyé</span>';
   }
+  /* Texte enregistré quand on envoie seulement une photo (sans légende) : il n’est pas réaffiché sous la photo. */
+  var PHOTO_SEULE = 'Photo jointe';
   function bubble(m, isAdmin, title) {
     var mine = isAdmin ? !!m.from_admin : !m.from_admin;
     var who = mine ? 'Vous' : (m.from_admin ? 'Administrateur général' : (title || 'Utilisateur'));
+    var photo = m.photo_path ? DP.photo.picture('messagerie', m.photo_path, 'Photo jointe au message') : '';
+    var texte = m.photo_path && m.body === PHOTO_SEULE ? '' : esc(m.body).replace(/\n/g, '<br>');
     return '<div class="bubble ' + (mine ? 'me' : 'them') + '"><div class="bubble-who">' + esc(who) + ' · ' + DP.ui.dateTime(m.created_at) +
-      '</div><div class="bubble-body">' + esc(m.body).replace(/\n/g, '<br>') + '</div>' +
+      '</div>' + photo + (texte ? '<div class="bubble-body">' + texte + '</div>' : '') +
       (mine ? '<div class="bubble-etat" data-etat="' + esc(m.id) + '">' + etatMessage(m) + '</div>' : '') + '</div>';
   }
 
@@ -187,18 +191,24 @@
         '</div>' +
         '<form class="form thread-form" autocomplete="off"><div class="field field-full">' +
         '<label for="msg-body">Votre message</label>' +
-        '<textarea id="msg-body" name="body" class="input" rows="3" maxlength="2000" required placeholder="Écrivez ici…"></textarea>' +
+        '<textarea id="msg-body" name="body" class="input" rows="3" maxlength="2000" placeholder="Écrivez ici… (ou ajoutez seulement une photo)"></textarea>' +
         '<div class="hint">Message privé : visible uniquement par vous et l’Administrateur général. Ne partagez pas de mot de passe.</div></div>' +
+        DP.photo.html({ mode: 'form', compact: true, label: 'Photo (facultatif — JPG, PNG ou WebP, 3 Mo maximum)' }) +
         '<div class="form-actions"><button type="submit" class="btn btn-primary">Envoyer</button></div></form></div></div>';
       var box = el.querySelector('.thread');
       if (box) box.scrollTop = box.scrollHeight;
+      DP.photo.hydrate(el);
       suivreEtats(el, userId, isAdmin);
       var form = el.querySelector('.thread-form');
+      var photo = DP.photo.bind(form, { mode: 'form' });
       DP.ui.bindForm(form, async function (data) {
-        if (!data.body) throw new Error('Le message est vide.');
-        await DP.api.insert('messages', {
-          thread_user_id: userId, from_user_id: me, from_admin: isAdmin, body: data.body,
-          read_by_admin: isAdmin, read_by_user: !isAdmin
+        var texte = (data.body || '').trim();
+        if (!texte && !photo.file() && !photo.pending()) throw new Error('Écrivez un message ou ajoutez une photo.');
+        await DP.photo.sendWith(photo, 'messagerie', 'msg-', function (chemin) {
+          return DP.api.insert('messages', {
+            thread_user_id: userId, from_user_id: me, from_admin: isAdmin, body: texte || PHOTO_SEULE,
+            read_by_admin: isAdmin, read_by_user: !isAdmin, photo_path: chemin
+          });
         });
         await DP.messages.thread(el, userId, opts);
         return 'Message envoyé.';

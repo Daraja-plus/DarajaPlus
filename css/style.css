@@ -197,6 +197,7 @@ textarea.input { min-height: 96px; resize: vertical; }
 .bubble.them { align-self: flex-start; }
 .bubble-who { font-size: .75rem; color: var(--muted); margin-bottom: .15rem; }
 .bubble-body { white-space: pre-wrap; word-break: break-word; }
+.msg-photo { display: block; max-width: 100%; max-height: 260px; border-radius: 8px; margin: 0 0 .35rem; object-fit: contain; background: #fff; }
 
 /* ---------- Toasts et modales ---------- */
 .toasts { position: fixed; right: 1rem; bottom: 1rem; display: flex; flex-direction: column; gap: .5rem; z-index: 100; max-width: min(360px, calc(100vw - 2rem)); }
@@ -267,6 +268,9 @@ textarea.input { min-height: 96px; resize: vertical; }
 .photo-row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
 .photo-input { flex: 1 1 220px; min-width: 0; display: grid; gap: .3rem; }
 .photo-field > .alert { margin: .6rem 0 0; }
+.photo-thumb { width: 64px; height: 64px; border-radius: 8px; object-fit: cover; display: block; }
+.ann-thumb { display: block; width: 72px; height: 72px; border-radius: 6px; object-fit: cover; margin-bottom: .3rem; }
+.ann-photo { display: block; max-width: 100%; max-height: 180px; border-radius: 8px; margin: .35rem 0; object-fit: cover; }
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: .6rem; margin: .5rem 0 0; }
 .gallery-item { margin: 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #fff; display: flex; flex-direction: column; }
 .gallery-item img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; display: block; }

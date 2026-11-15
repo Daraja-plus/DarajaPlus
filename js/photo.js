@@ -60,11 +60,27 @@
     throw new Error('Cette photo ne peut pas être réduite sous 3 Mo. Choisissez une autre image.');
   }
 
-  /* Envoi d'un fichier dans le dossier de l'utilisateur (le premier niveau du chemin est son identifiant). */
-  async function upload(file) {
-    var path = DP.api.uid + '/photo-' + Date.now() + '_' + safeName(file.name);
-    await DP.api.uploadTo('visuels', path, file);
+  /* Envoi d'un fichier dans le dossier de l'utilisateur (le premier niveau du chemin est son identifiant).
+     bucket : « visuels » (profil, logos, activités), « messagerie » (photos de messages), « annonces ». */
+  async function uploadTo(bucket, file, prefix) {
+    var path = DP.api.uid + '/' + (prefix || 'photo-') + Date.now() + '_' + safeName(file.name);
+    await DP.api.uploadTo(bucket, path, file);
     return path;
+  }
+  function upload(file) { return uploadTo('visuels', file, 'photo-'); }
+
+  /* Envoie la photo choisie dans ctl (retour de bind), puis appelle create(chemin) qui crée la ligne qui la référence.
+     Si la création échoue, la photo envoyée est supprimée pour ne pas laisser de fichier orphelin. */
+  async function sendWith(ctl, bucket, prefix, create) {
+    if (ctl && ctl.pending()) throw new Error('Cette photo est trop lourde : réduisez-la (bouton « Compresser la photo ») ou choisissez-en une autre.');
+    var file = ctl ? ctl.file() : null;
+    var chemin = file ? await uploadTo(bucket, file, prefix) : null;
+    try {
+      return await create(chemin);
+    } catch (e) {
+      if (chemin) DP.api.removeFrom(bucket, chemin).catch(function () { /* non bloquant */ });
+      throw e;
+    }
   }
 
   /* Photo de profil : envoi, enregistrement du chemin dans le profil, suppression de l'ancienne photo. */
@@ -86,12 +102,13 @@
   /* Champ photo (HTML). opts : { mode: 'save' | 'form', url, initials, alt, label }
      « save » : la photo est enregistrée dès qu'elle est validée (Mon compte, profil).
      « form » : la photo est gardée et envoyée avec le formulaire (inscription, photos d'activité). */
+  /* opts.compact : champ réduit (sans grand avatar), pour les messages et les annonces. */
   function html(opts) {
     seq += 1;
     var id = 'photo-input-' + seq;
-    return '<div class="photo-field" data-photo data-mode="' + esc(opts.mode || 'form') + '">' +
+    return '<div class="photo-field' + (opts.compact ? ' photo-compact' : '') + '" data-photo data-mode="' + esc(opts.mode || 'form') + '">' +
       '<div class="photo-row">' +
-        '<div data-photo-preview>' + avatar(opts.url, opts.initials, opts.alt) + '</div>' +
+        '<div data-photo-preview>' + (opts.compact ? '' : avatar(opts.url, opts.initials, opts.alt)) + '</div>' +
         '<div class="photo-input">' +
           '<label class="field-label" for="' + id + '">' + esc(opts.label || 'Photo (JPG, PNG ou WebP — 3 Mo maximum)') + '</label>' +
           '<input class="input" id="' + id + '" type="file" accept="' + ACCEPT + '" data-photo-input>' +
@@ -115,7 +132,8 @@
 
     function say(kind, body) { notice.innerHTML = body ? DP.ui.alert(kind, body) : ''; }
     function showPreview(file) {
-      preview.innerHTML = '<img src="' + URL.createObjectURL(file) + '" alt="Aperçu de la photo" class="photo-avatar">';
+      var cls = field.classList.contains('photo-compact') ? 'photo-thumb' : 'photo-avatar';
+      preview.innerHTML = '<img src="' + URL.createObjectURL(file) + '" alt="Aperçu de la photo" class="' + cls + '">';
     }
     function button(label, attr) {
       return '<div class="btn-row" style="margin-top:.5rem"><button type="button" class="btn btn-primary btn-sm" ' + attr + '>' + esc(label) + '</button></div>';
@@ -178,8 +196,26 @@
 
     return {
       file: function () { return chosen; },
+      /* Vrai si une photo est choisie mais pas encore validée (trop lourde, compression non faite). */
+      pending: function () { return !chosen && !!(input.files && input.files[0]); },
       reset: function () { chosen = null; input.value = ''; say('', ''); }
     };
+  }
+
+  /* Photo affichée dans un message ou une annonce. Le lien signé est ajouté ensuite par hydrate(). */
+  function picture(bucket, path, alt, cls) {
+    if (!path) return '';
+    return '<img class="' + esc(cls || 'msg-photo') + '" alt="' + esc(alt || 'Photo') + '" loading="lazy"' +
+      ' data-photo-bucket="' + esc(bucket) + '" data-photo-path="' + esc(path) + '">';
+  }
+  /* Ajoute le lien signé (valable 1 heure) à chaque photo de root. Si la photo est indisponible, son texte de remplacement reste affiché. */
+  function hydrate(root) {
+    if (!root) return;
+    root.querySelectorAll('img[data-photo-path]').forEach(function (img) {
+      DP.api.signedUrlFor(img.getAttribute('data-photo-bucket'), img.getAttribute('data-photo-path'), 3600)
+        .then(function (url) { img.src = url; })
+        .catch(function () { img.alt = 'Photo indisponible'; });
+    });
   }
 
   DP.photo = {
@@ -189,9 +225,13 @@
     isImage: isImage,
     compress: compress,
     upload: upload,
+    uploadTo: uploadTo,
+    sendWith: sendWith,
     saveProfile: saveProfile,
     avatar: avatar,
     html: html,
-    bind: bind
+    bind: bind,
+    picture: picture,
+    hydrate: hydrate
   };
 })();

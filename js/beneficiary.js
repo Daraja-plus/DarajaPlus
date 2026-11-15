@@ -625,7 +625,7 @@
     var partners = byId(await DP.api.get('partners', { select: 'id,legal_name', id: inq(offers.map(function (o) { return o.partner_id; })) || 'is.null' }));
     el.innerHTML = ui.header('Opportunités', 'Programmes, appels à projets et offres publiés sur DarajaPlus. Une opportunité n’est pas une promesse de financement.') +
       (anns.length ? ui.card('Annonces', '<ul class="notif-list">' + anns.map(function (a) {
-        return '<li class="notif"><div class="notif-main"><strong>' + esc(a.title) + '</strong><div class="small">' + esc(a.body) + '</div>' +
+        return '<li class="notif"><div class="notif-main"><strong>' + esc(a.title) + '</strong>' + DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-photo') + '<div class="small">' + esc(a.body) + '</div>' +
           '<div class="small muted">' + ui.dateTime(a.created_at) + '</div></div></li>';
       }).join('') + '</ul>') : '') +
       ui.card('Opportunités pour ma catégorie', offers.length ? '<div class="grid-2">' + offers.map(function (o) {
@@ -640,6 +640,7 @@
           (o.deadline ? '<dt>Date limite</dt><dd>' + ui.date(o.deadline) + '</dd>' : '') +
           '</dl></div></article>';
       }).join('') + '</div>' : ui.empty('Aucune opportunité publiée pour votre catégorie pour le moment.'));
+    DP.photo.hydrate(el);
   }
   var OFFER_LABEL = {
     programme_accompagnement: 'Programme d’accompagnement', appel_projets: 'Appel à projets',
