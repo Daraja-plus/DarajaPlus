@@ -182,6 +182,37 @@
   /* ---------- Pages communes ---------- */
   var ALL = ['admin', 'host', 'agent', 'beneficiary', 'partner'];
 
+  /* Catégories des notifications : chaque type (kind) n’appartient qu’à une seule catégorie. */
+  var NOTIF_CATEGORIES = [
+    { key: 'comptes', label: 'Comptes', kinds: ['nouveau_compte', 'compte_valide', 'compte'] },
+    { key: 'affectations', label: 'Affectations et catégories', kinds: ['affectation', 'categorie'] },
+    { key: 'messages', label: 'Messages et annonces', kinds: ['message', 'annonce', 'contact'] },
+    { key: 'projets', label: 'Projets, offres et présentations', kinds: ['projet', 'presentation', 'offre', 'document', 'beneficiaire', 'carrefour'] },
+    { key: 'finance', label: 'Financement et visibilité', kinds: ['mise_en_relation', 'resultat', 'visibilite'] },
+    { key: 'audit', label: 'Journal d’activité', kinds: ['audit'] }
+  ];
+  var NOTIF_AUTRES = { key: 'autres', label: 'Autres', kinds: [] };
+
+  /* Une carte par catégorie, seulement si elle contient des notifications, dans l’ordre ci-dessus. */
+  function notifGroupes(rows, role) {
+    var groupes = {};
+    rows.forEach(function (n) {
+      var cat = NOTIF_CATEGORIES.filter(function (c) { return c.kinds.indexOf(n.kind) !== -1; })[0] || NOTIF_AUTRES;
+      (groupes[cat.key] = groupes[cat.key] || { cat: cat, items: [] }).items.push(n);
+    });
+    return NOTIF_CATEGORIES.concat([NOTIF_AUTRES]).filter(function (c) { return groupes[c.key]; }).map(function (c) {
+      var g = groupes[c.key];
+      var nonLues = g.items.filter(function (n) { return !n.read_at; }).length;
+      return DP.ui.card(c.label + (nonLues ? ' · ' + nonLues + ' non lue(s)' : ''),
+        '<ul class="notif-list">' + g.items.map(function (n) {
+          return '<li class="notif' + (n.read_at ? '' : ' unread') + '"><div class="notif-main"><strong>' + esc(n.title) + '</strong>' +
+            (n.body ? '<div class="small">' + esc(n.body) + '</div>' : '') +
+            '<div class="small muted">' + DP.ui.dateTime(n.created_at) + '</div></div>' +
+            '<a class="btn btn-sm btn-outline" href="' + esc(resolveLink(n.link, role)) + '" data-mark="' + esc(n.id) + '">Ouvrir</a></li>';
+        }).join('') + '</ul>');
+    }).join('');
+  }
+
   DP.register([
     {
       path: '/notifications', roles: ALL, title: 'Notifications',
@@ -191,12 +222,7 @@
         var role = DP.app.profile.role;
         el.innerHTML = DP.ui.header('Notifications', unread ? unread + ' non lue(s)' : 'Tout est lu',
           unread ? '<button class="btn btn-outline" type="button" data-read-all>Tout marquer comme lu</button>' : '') +
-          DP.ui.card(null, rows.length ? '<ul class="notif-list">' + rows.map(function (n) {
-            return '<li class="notif' + (n.read_at ? '' : ' unread') + '"><div class="notif-main"><strong>' + esc(n.title) + '</strong>' +
-              (n.body ? '<div class="small">' + esc(n.body) + '</div>' : '') +
-              '<div class="small muted">' + DP.ui.dateTime(n.created_at) + '</div></div>' +
-              '<a class="btn btn-sm btn-outline" href="' + esc(resolveLink(n.link, role)) + '" data-mark="' + esc(n.id) + '">Ouvrir</a></li>';
-          }).join('') + '</ul>' : DP.ui.empty('Aucune notification pour le moment.'));
+          (rows.length ? notifGroupes(rows, role) : DP.ui.card(null, DP.ui.empty('Aucune notification pour le moment.')));
         el.querySelectorAll('[data-mark]').forEach(function (a) {
           a.addEventListener('click', async function () {
             try { await DP.api.update('notifications', { id: 'eq.' + a.dataset.mark }, { read_at: new Date().toISOString() }); } catch (e) { /* ignoré */ }
