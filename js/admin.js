@@ -229,6 +229,50 @@
     });
   }
 
+  /* Présence : une personne est « en ligne » si son application a signalé une activité il y a moins de 5 minutes. */
+  var SEUIL_EN_LIGNE_MS = 5 * 60 * 1000;
+  function depuisTexte(ms) {
+    var min = Math.floor(ms / 60000);
+    if (min < 60) return 'il y a ' + Math.max(min, 1) + ' min';
+    var h = Math.floor(min / 60);
+    if (h < 24) return 'il y a ' + h + ' h';
+    return 'il y a ' + Math.floor(h / 24) + ' j';
+  }
+  function presenceHtml(pr) {
+    if (!pr || !pr.last_seen_at) return '<span class="small muted">Jamais connecté</span>';
+    var ecart = Date.now() - new Date(pr.last_seen_at).getTime();
+    if (ecart < SEUIL_EN_LIGNE_MS) return '<span class="badge badge-ok">En ligne</span>';
+    return '<span class="small muted">Hors ligne · vu ' + esc(depuisTexte(ecart)) + '</span>';
+  }
+  /* Les identifiants sont envoyés par lots de 100 : des adresses trop longues sont refusées. */
+  async function parLots(ids, lire) {
+    var resultat = [];
+    for (var i = 0; i < ids.length; i += 100) {
+      resultat = resultat.concat(await lire(ids.slice(i, i + 100)));
+    }
+    return resultat;
+  }
+  /* Comptes actifs (hors administrateur) dont la présence date de moins de 5 minutes. */
+  async function comptesEnLigne() {
+    var seuil = new Date(Date.now() - SEUIL_EN_LIGNE_MS).toISOString();
+    var pres = await DP.api.get('presences', { select: 'profile_id', last_seen_at: 'gte.' + seuil, limit: 1000 });
+    var ids = pres.map(function (x) { return x.profile_id; });
+    if (!ids.length) return [];
+    var comptes = await parLots(ids, function (lot) {
+      return DP.api.get('profiles', { select: '*', id: 'in.(' + lot.join(',') + ')', status: 'eq.active', role: 'neq.admin', limit: 1000 });
+    });
+    return comptes.sort(function (a, b) { return String(a.prenom || '').localeCompare(String(b.prenom || ''), 'fr'); });
+  }
+  /* Dernière activité de chaque compte affiché, indexée par identifiant. */
+  async function presencesPour(ids) {
+    var map = {};
+    var pres = await parLots(ids, function (lot) {
+      return DP.api.get('presences', { select: 'profile_id,last_seen_at', profile_id: 'in.(' + lot.join(',') + ')', limit: 1000 });
+    });
+    pres.forEach(function (x) { map[x.profile_id] = x; });
+    return map;
+  }
+
   /* Recherche d’un utilisateur : nom, identifiant, code, e-mail ou téléphone, tous statuts confondus.
      Chaque mot doit correspondre à l’un de ces champs ; les caractères spéciaux sont retirés. */
   function termesRecherche(q) {
@@ -245,8 +289,10 @@
     var filter = (ctx.query && ctx.query.get('statut')) || 'pending';
     var q = String((ctx.query && ctx.query.get('q')) || '').trim();
     var termes = termesRecherche(q);
-    var tabs = [['pending', 'En attente'], ['active', 'Actifs'], ['suspended', 'Suspendus'], ['rejected', 'Refusés']];
-    var rows = termes.length ? await rechercherComptes(termes) : await DP.api.get('profiles', { select: '*', status: 'eq.' + filter, role: 'neq.admin', order: 'created_at.desc', limit: 500 });
+    var enLigne = await comptesEnLigne();
+    var tabs = [['pending', 'En attente'], ['active', 'Actifs'], ['online', 'En ligne (' + enLigne.length + ')'], ['suspended', 'Suspendus'], ['rejected', 'Refusés']];
+    var rows = termes.length ? await rechercherComptes(termes) : filter === 'online' ? enLigne : await DP.api.get('profiles', { select: '*', status: 'eq.' + filter, role: 'neq.admin', order: 'created_at.desc', limit: 500 });
+    var presences = await presencesPour(rows.map(function (p) { return p.id; }));
     var map = byId(rows);
     var lk = await lookups();
     var recherche = ui.card(null, '<form class="form" id="recherche-comptes" role="search">' +
@@ -270,10 +316,11 @@
         { label: 'Téléphone', render: function (p) { return esc(p.phone || '—'); } },
         { label: 'Inscrit le', render: function (p) { return ui.date(p.created_at); } },
         { label: 'Statut', render: function (p) { return p.status === 'active' ? '<span class="badge badge-ok">Validé</span>' : ui.badge(p.status); } },
+        { label: 'Présence', render: function (p) { return presenceHtml(presences[p.id]); } },
         { label: 'Validé le', render: function (p) { return p.validated_at ? ui.dateTime(p.validated_at) : '—'; } },
         { label: 'Motif de refus', render: function (p) { return esc(short(p.rejection_reason, 80) || '—'); } },
         { label: 'Action', cls: 'actions', render: actionsForAccount }
-      ], rows, termes.length ? 'Aucun compte ne correspond à cette recherche.' : 'Aucun compte dans cette catégorie.'));
+      ], rows, termes.length ? 'Aucun compte ne correspond à cette recherche.' : filter === 'online' ? 'Personne n’est en ligne pour le moment.' : 'Aucun compte dans cette catégorie.'));
 
     act(el, '[data-review]', function (b) { return openReview(map[b.dataset.review], lk); });
     var formRecherche = el.querySelector('#recherche-comptes');

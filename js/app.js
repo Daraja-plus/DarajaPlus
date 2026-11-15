@@ -525,11 +525,28 @@
     }
   }
 
+  /* Présence : l’application signale une activité toutes les 2 minutes tant qu’elle est ouverte.
+     Le serveur n’enregistre qu’une fois par minute ; une erreur réseau est ignorée sans gêner l’utilisation. */
+  var presenceTimer = null;
+  function signalerPresence() {
+    if (!DP.api.uid) return;
+    DP.api.rpc('marquer_presence').catch(function () { /* hors ligne ou compte non actif : ignoré */ });
+  }
+  function demarrerPresence() {
+    if (presenceTimer) return;
+    signalerPresence();
+    presenceTimer = setInterval(signalerPresence, 2 * 60 * 1000);
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') signalerPresence();
+    });
+  }
+
   DP.start = async function () {
     DP.api.init();
     window.addEventListener('hashchange', navigate);
     await handleAuthLink();
     if (!location.hash) location.hash = '#/';
     await navigate();
+    demarrerPresence();
   };
 })();
