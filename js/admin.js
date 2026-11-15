@@ -191,9 +191,9 @@
     ui.toast('Compte de ' + pname(p) + ' validé' + when + '.' + ident + ' La personne est prévenue sur son compte.', 'ok');
   }
 
-  /* Bouton « Écrire » : ouvre le fil de messages privés avec cette personne. */
+  /* Bouton « Message » : ouvre le fil de messages privés avec cette personne. */
   function actionsForAccount(p) {
-    return actionsStatut(p) + ' <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Écrire en privé à ' + esc(pname(p)) + '">Écrire</a>';
+    return actionsStatut(p) + ' <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Envoyer un message privé à ' + esc(pname(p)) + '">Message</a>';
   }
 
   function actionsStatut(p) {
@@ -1270,12 +1270,12 @@
       { label: 'Situation', render: function (p) { var s = situation(p); return s ? esc(s) : '<span class="badge badge-warn">En attente de catégorie</span>'; } },
       { label: 'Code', render: function (p) { return esc(p.code || (data.ficheOf[p.id] && data.ficheOf[p.id].code) || '—'); } },
       { label: 'Rattaché à', render: function (p) { return esc(rattachement(p)); } },
-      { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-outline" type="button" data-affecter="' + esc(p.id) + '">Modifier</button> <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Écrire en privé à ' + esc(pname(p)) + '">Écrire</a>'; } }
+      { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-outline" type="button" data-affecter="' + esc(p.id) + '">Modifier</button> <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Envoyer un message privé à ' + esc(pname(p)) + '">Message</a>'; } }
     ] : [
       nom,
       { label: 'Inscrit le', render: function (p) { return ui.date(p.created_at); } },
       { label: 'Situation', render: function (p) { return '<span class="badge badge-warn">En attente de catégorie</span>'; } },
-      { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-primary" type="button" data-affecter="' + esc(p.id) + '">Affecter</button> <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Écrire en privé à ' + esc(pname(p)) + '">Écrire</a>'; } }
+      { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-primary" type="button" data-affecter="' + esc(p.id) + '">Affecter</button> <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Envoyer un message privé à ' + esc(pname(p)) + '">Message</a>'; } }
     ];
     var tabs = [['attente', 'À affecter (' + nAttente + ')'], ['tous', 'Tous les comptes actifs']];
     var alerte = enAttente.length ? ui.alert('info', '<strong>' + enAttente.length + ' compte(s) en attente de validation.</strong> ' +
