@@ -397,17 +397,7 @@
         { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(ui.money(p.amount, p.currency)) + '</div>'; } },
         { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
         { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(p.id) + '">Statut</button>'; } }
-      ], projects, 'Aucun projet pour le moment.') +
-        '<details class="new-block"><summary>+ Nouveau projet ou besoin</summary>' +
-        '<form class="form" id="f-proj" style="margin-top:.75rem">' +
-        ui.field({ name: 'title', label: 'Intitulé du projet', required: true, full: true }) +
-        '<div class="field-row">' + ui.field({ name: 'sector', label: 'Secteur' }) +
-        ui.field({ name: 'amount', label: 'Montant demandé', type: 'number', dataType: 'number', step: 'any', min: 0.01, required: true }) + '</div>' +
-        '<div class="field-row">' + ui.field({ name: 'currency', label: 'Devise', type: 'select', options: [['USD', 'USD'], ['FC', 'FC']], value: 'USD' }) +
-        ui.field({ name: 'due_date', label: 'Échéance souhaitée', type: 'date', dataType: 'nullable' }) + '</div>' +
-        ui.field({ name: 'description', label: 'Description de l’activité ou du projet', type: 'textarea', rows: 3, full: true }) +
-        ui.field({ name: 'use_of_funds', label: 'Utilisation des fonds', type: 'textarea', rows: 2, full: true }) +
-        '<div class="form-actions"><button class="btn btn-primary" type="submit">Créer le projet</button></div></form></details>') +
+      ], projects, 'Aucun projet pour le moment.')) +
       '</div>' +
       ui.card('Pièces du bénéficiaire', docsTable(docs, 'Aucune pièce déposée pour le moment.'));
 
@@ -417,16 +407,6 @@
       await DP.api.update('beneficiaries', { id: 'eq.' + id }, patch);
       refresh();
       return 'Fiche enregistrée.';
-    });
-    ui.bindForm(el.querySelector('#f-proj'), async function (d) {
-      if (!(d.amount > 0)) throw new Error('Le montant doit être supérieur à 0.');
-      await DP.api.insert('projects', {
-        beneficiary_id: id, created_by: DP.api.uid, title: d.title, sector: d.sector || null,
-        description: d.description || null, amount: d.amount, currency: d.currency,
-        use_of_funds: d.use_of_funds || null, due_date: d.due_date || null, status: 'draft'
-      });
-      refresh();
-      return 'Projet créé (brouillon).';
     });
     act(el, '[data-status]', function (btn) {
       var p = projects.filter(function (x) { return x.id === btn.dataset.status; })[0];
