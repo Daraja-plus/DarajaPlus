@@ -99,7 +99,14 @@ async function openContext(browser, opts) {
     }
     if (p.indexOf('/storage/v1/object/sign/') === 0) return reply({ signedURL: '/object/sign/visuels/photo.png?token=t' });
     if (p.indexOf('/storage/v1/object/visuels/') === 0) return reply({ Key: 'visuels' + p.slice('/storage/v1/object/visuels'.length) });
-    if (p === '/rest/v1/rpc/presentation_creer_projet') return reply(PROJECT_ID);
+    if (p === '/rest/v1/rpc/presentation_enregistrer') {
+      /* Comme la base : le projet est créé (ou modifié) et sa présentation enregistrée en une seule opération. */
+      const b = JSON.parse(req.postData() || '{}');
+      state.row = Object.assign({}, state.row || {}, { user_id: USER_ID, project_id: PROJECT_ID, content: b.p_content,
+        photos: b.p_photos, statut: b.p_statut, updated_at: '2026-11-13T09:00:00Z' });
+      if (b.p_statut === 'publiee') state.row.publiee_at = '2026-11-13T09:00:00Z';
+      return reply(PROJECT_ID);
+    }
     if (p.indexOf('/rest/v1/rpc/') === 0) return reply({});
     return reply([]);
   });
@@ -168,6 +175,16 @@ async function bodyText(page) {
       (await p3.page.locator('#f-pres button[data-cible="publiee"]').count()) === 1);
     check('page : aucune erreur JavaScript', p3.errors.length === 0, p3.errors.join(' | '));
 
+    /* 3 bis) « Le besoin » : montant, devise, secteur, échéance, entreprise, description, utilisation des fonds */
+    check('page : « Le besoin » affiché avec le montant du projet', (await p3.page.locator('#f-pres input[name="amount"]').inputValue()) === '3000');
+    check('page : « Le besoin » : tous les champs du projet présents',
+      (await p3.page.locator('#f-pres select[name="currency"]').count()) === 1 &&
+      (await p3.page.locator('#f-pres input[name="sector"]').count()) === 1 &&
+      (await p3.page.locator('#f-pres input[name="due_date"]').count()) === 1 &&
+      (await p3.page.locator('#f-pres select[name="establishment_id"]').count()) === 1 &&
+      (await p3.page.locator('#f-pres textarea[name="description"]').count()) === 1 &&
+      (await p3.page.locator('#f-pres textarea[name="use_of_funds"]').count()) === 1);
+
     /* 4) Titre trop long */
     await p3.page.locator('#f-pres input[name="titre"]').fill('x'.repeat(130));
     await p3.page.locator('#f-pres button[data-cible="brouillon"]').click();
@@ -182,14 +199,16 @@ async function bodyText(page) {
     await p3.page.locator('#f-pres button[data-cible="brouillon"]').click();
     const saved = await until(async () => (await bodyText(p3.page)).indexOf('Brouillon enregistré') !== -1, 15000);
     check('brouillon : message de confirmation affiché', saved);
-    const writes = c3.__log.filter((e) => e.path === '/rest/v1/presentations' && (e.method === 'POST' || e.method === 'PATCH'));
-    check('brouillon : la fiche est envoyée à la base', writes.length >= 1, writes.map((w) => w.method).join(','));
+    const writes = c3.__log.filter((e) => e.path === '/rest/v1/rpc/presentation_enregistrer');
+    check('brouillon : le projet et sa fiche sont enregistrés par une seule fonction de la base', writes.length >= 1, writes.length + ' appel(s)');
+    const directes = c3.__log.filter((e) => e.path === '/rest/v1/presentations' && e.method !== 'GET');
+    check('brouillon : aucune écriture directe dans presentations', directes.length === 0);
     const withText = writes.filter((w) => w.body.indexOf('Kiosque test') !== -1 && w.body.indexOf('Problème de recharge') !== -1);
     check('brouillon : les réponses sont dans la fiche', withText.length >= 1);
-    check('brouillon : la fiche est rattachée au projet', withText.length >= 1 && withText[withText.length - 1].body.indexOf(PROJECT_ID) !== -1);
+    check('brouillon : la fiche est rattachée au projet', withText.length >= 1 && withText[withText.length - 1].body.indexOf('"p_projet":"' + PROJECT_ID + '"') !== -1);
     const dernier = withText.length ? withText[withText.length - 1].body : '';
-    check('brouillon : statut « brouillon » envoyé', dernier.indexOf('"statut":"brouillon"') !== -1);
-    check('brouillon : la photo est rangée dans le dossier du bénéficiaire', dernier.indexOf('"photos":["' + USER_ID + '/photo-') !== -1);
+    check('brouillon : statut « brouillon » envoyé', dernier.indexOf('"p_statut":"brouillon"') !== -1);
+    check('brouillon : la photo est rangée dans le dossier du bénéficiaire', dernier.indexOf('"p_photos":["' + USER_ID + '/photo-') !== -1);
     check('brouillon : aucune erreur JavaScript', p3.errors.length === 0, p3.errors.join(' | '));
 
     /* 6) Publication incomplète : refusée, les rubriques manquantes sont nommées, rien n’est envoyé */
@@ -206,7 +225,7 @@ async function bodyText(page) {
     await p3.page.locator('#f-pres button[data-cible="publiee"]').click();
     const publie = await until(async () => (await bodyText(p3.page)).indexOf('Présentation publiée') !== -1, 15000);
     check('publier complet : message de confirmation affiché', publie);
-    const pub = c3.__log.filter((e) => e.path === '/rest/v1/presentations' && e.method === 'PATCH' && e.body.indexOf('"statut":"publiee"') !== -1);
+    const pub = c3.__log.filter((e) => e.path === '/rest/v1/rpc/presentation_enregistrer' && e.body.indexOf('"p_statut":"publiee"') !== -1);
     check('publier complet : statut « publiee » envoyé', pub.length >= 1);
     check('publier complet : les rubriques sont envoyées', pub.length >= 1 && pub[pub.length - 1].body.indexOf('quarante kiosques') !== -1);
 
@@ -224,6 +243,10 @@ async function bodyText(page) {
     const lien9 = p9.page.locator('a[href="#/espace/presentation/' + PROJECT_ID + '"]');
     check('liste des projets : le lien vers la présentation du projet est présent', (await lien9.count()) === 1);
     check('liste des projets : l’état « Publiée, à vérifier » est affiché', p9.text.indexOf('Publiée, à vérifier') !== -1);
+    check('liste des projets : plus de formulaire « Nouveau projet ou besoin »',
+      (await p9.page.locator('#f-proj').count()) === 0 && p9.text.indexOf('Nouveau projet ou besoin') === -1);
+    check('liste des projets : bouton « Présenter mon projet » présent',
+      (await p9.page.locator('a.btn-primary[href="#/espace/presentation/nouveau"]').count()) >= 1);
     check('liste des projets : aucune erreur JavaScript', p9.errors.length === 0, p9.errors.join(' | '));
     /* 10) « Présenter mon projet » : montant obligatoire, puis création du projet et redirection vers sa présentation */
     const c10 = await openContext(browser, { category: 'ba' });
@@ -236,14 +259,15 @@ async function bodyText(page) {
     await p10.page.locator('#f-pres button[data-cible="brouillon"]').click();
     const sansMontant = await until(async () => (await bodyText(p10.page)).indexOf('Le montant doit être supérieur à 0') !== -1, 5000);
     check('nouveau : montant vide refusé', sansMontant);
-    check('nouveau : montant vide, rien n’est envoyé', c10.__log.filter((e) => e.path === '/rest/v1/rpc/presentation_creer_projet').length === 0);
+    check('nouveau : montant vide, rien n’est envoyé', c10.__log.filter((e) => e.path === '/rest/v1/rpc/presentation_enregistrer').length === 0);
     await p10.page.locator('#f-pres input[name="amount"]').fill('2500');
     await p10.page.locator('#f-pres button[data-cible="brouillon"]').click();
     const cree = await until(async () => p10.page.url().indexOf('#/espace/presentation/' + PROJECT_ID) !== -1, 15000);
     check('nouveau : après enregistrement, redirection vers la présentation du projet créé', cree, p10.page.url());
-    const appel = c10.__log.filter((e) => e.path === '/rest/v1/rpc/presentation_creer_projet');
-    check('nouveau : un seul appel de la fonction de création', appel.length === 1);
+    const appel = c10.__log.filter((e) => e.path === '/rest/v1/rpc/presentation_enregistrer');
+    check('nouveau : un seul appel de la fonction d’enregistrement', appel.length === 1);
     const corps = appel.length ? appel[0].body : '';
+    check('nouveau : création (pas de projet existant à modifier)', corps.indexOf('"p_projet":null') !== -1, corps.slice(0, 120));
     check('nouveau : montant, devise et statut envoyés',
       corps.indexOf('"p_amount":2500') !== -1 && corps.indexOf('"p_currency":"USD"') !== -1 && corps.indexOf('"p_statut":"brouillon"') !== -1, corps.slice(0, 200));
     check('nouveau : titre envoyé dans le contenu', corps.indexOf('Kiosque test') !== -1);

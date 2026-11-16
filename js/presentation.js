@@ -1,4 +1,4 @@
-/* DarajaPlus — « Présenter mon projet » (espace bénéficiaire) : une fiche par projet. « Présenter mon projet » crée le projet et sa fiche ; la fiche se modifie ensuite depuis « Mes projets et besoins ».
+/* DarajaPlus — « Présenter mon projet » (espace bénéficiaire) : une fiche par projet. La fiche contient le projet et son besoin : « Présenter mon projet » crée le projet et sa fiche, et la même fiche permet ensuite de le modifier (il n'existe pas d'autre formulaire de création).
    Une fiche rédigée rubrique par rubrique, en quelques lignes, avec 1 à 4 photos du produit ou des réalisations.
    Chaque rubrique a une aide et un exemple fictif.
    Trois statuts : « brouillon » (seul le bénéficiaire voit la fiche), « publiée » (l'administrateur la vérifie),
@@ -48,7 +48,7 @@
 
   /* Le projet du bénéficiaire connecté : la base ne renvoie que ses propres projets. */
   async function loadProjet(projectId) {
-    var rows = await DP.api.get('projects', { select: 'id,title,status', id: 'eq.' + projectId });
+    var rows = await DP.api.get('projects', { select: '*', id: 'eq.' + projectId });
     return rows[0] || null;
   }
 
@@ -58,16 +58,34 @@
     return rows[0] || null;
   }
 
-  function montantCard() {
-    return ui.card('Le besoin', '<p class="small muted">Le montant sert à créer votre projet. Ce n’est pas une promesse de financement.</p>' +
+  /* Entreprises créées par ce compte : seules celles-là peuvent être liées à un projet (règle de la base). */
+  async function loadEtablissements() {
+    return DP.api.get('establishments', { select: 'id,name', created_by: 'eq.' + DP.api.uid, order: 'name.asc' });
+  }
+
+  /* « Le besoin » : toutes les informations du projet. La même carte sert à créer un projet et à le modifier. */
+  function besoinCard(projet, etablissements) {
+    var p = projet || {};
+    return ui.card('Le besoin',
+      '<p class="small muted">Ces informations décrivent votre projet et votre besoin de financement. Le montant n’est pas une promesse de financement.</p>' +
       '<div class="field-row">' +
-      ui.field({ name: 'amount', label: 'Montant nécessaire', type: 'number', dataType: 'number', step: 'any', min: 0.01, required: true }) +
-      ui.field({ name: 'currency', label: 'Devise', type: 'select', options: [['USD', 'USD'], ['FC', 'FC']], value: 'USD' }) +
-      '</div>');
+      ui.field({ name: 'amount', label: 'Montant nécessaire', type: 'number', dataType: 'number', step: 'any', min: 0.01, required: true, value: p.amount }) +
+      ui.field({ name: 'currency', label: 'Devise', type: 'select', options: [['USD', 'USD'], ['FC', 'FC']], value: p.currency || 'USD' }) +
+      '</div>' +
+      '<div class="field-row">' +
+      ui.field({ name: 'sector', label: 'Secteur d’activité', value: p.sector, placeholder: 'ex. commerce, agriculture', dataType: 'nullable' }) +
+      ui.field({ name: 'due_date', label: 'Échéance souhaitée', type: 'date', value: p.due_date, dataType: 'nullable' }) +
+      '</div>' +
+      ui.field({ name: 'establishment_id', label: 'Entreprise concernée', type: 'select',
+        options: etablissements.map(function (e) { return [e.id, e.name]; }), value: p.establishment_id,
+        placeholder: 'Aucune entreprise précise', dataType: 'nullable', full: true,
+        hint: etablissements.length ? '' : 'Ajoutez d’abord votre entreprise dans « Mes entreprises », si ce projet la concerne.' }) +
+      ui.field({ name: 'description', label: 'Votre activité et ce projet', type: 'textarea', rows: 3, value: p.description, full: true, dataType: 'nullable' }) +
+      ui.field({ name: 'use_of_funds', label: 'À quoi serviront les fonds ?', type: 'textarea', rows: 3, value: p.use_of_funds, full: true, dataType: 'nullable' }));
   }
 
   function alerteNouveau(row) {
-    return ui.alert('info', '<strong>Nouveau projet.</strong> Indiquez le montant demandé et la devise, puis enregistrez. ' +
+    return ui.alert('info', '<strong>Nouveau projet.</strong> Indiquez votre besoin (montant et devise au minimum), puis enregistrez. ' +
       (row ? 'Votre présentation déjà rédigée sera reprise pour ce projet.' : 'Le projet apparaît ensuite dans « Mes projets et besoins ».'));
   }
 
@@ -173,6 +191,7 @@
       }
       row = await loadRow(projectId);
     }
+    var etablissements = await loadEtablissements();
     var content = (row && row.content) || {};
     var photos = (row && row.photos) || [];
     var urls = await Promise.all(photos.map(function (p) {
@@ -181,13 +200,13 @@
 
     var titre = nouveau ? 'Présenter mon projet' : 'Présentation : ' + projet.title;
     var intro = nouveau
-      ? 'Rédigez votre projet rubrique par rubrique. Le montant demandé crée votre projet dans « Mes projets et besoins ».'
-      : 'Rédigez ce projet rubrique par rubrique, en quelques lignes : clair, concis et précis. Chaque projet a sa propre présentation.';
+      ? 'Rédigez votre projet rubrique par rubrique et indiquez votre besoin. Le projet apparaît ensuite dans « Mes projets et besoins ».'
+      : 'Rédigez ce projet rubrique par rubrique, en quelques lignes : clair, concis et précis. Le besoin et les rubriques se modifient ici.';
     el.innerHTML = ui.header(titre, intro) +
       (nouveau ? alerteNouveau(row) : statusAlert(row)) +
       '<form class="form" id="f-pres" data-reset="false" novalidate>' +
         '<input type="hidden" name="cible" value="brouillon">' +
-        (nouveau ? montantCard() : '') +
+        besoinCard(projet, etablissements) +
         SECTIONS.map(function (s, i) {
           return sectionCard(s, i, content[s.key] || '', s.photos ? photosHtml(urls) : '');
         }).join('') +
@@ -212,40 +231,39 @@
     ui.bindForm(form, async function (d) {
       var publier = d.cible === 'publiee';
       verifierRubriques(d, publier);
-      if (nouveau) {
-        if (!String(d.titre || '').trim()) throw new Error('Le titre du projet est obligatoire.');
-        if (!(Number(d.amount) > 0)) throw new Error('Le montant doit être supérieur à 0.');
-        if (d.currency !== 'USD' && d.currency !== 'FC') throw new Error('Choisissez la devise : USD ou FC.');
-      }
+      if (!String(d.titre || '').trim()) throw new Error('Le titre du projet est obligatoire.');
+      if (!(Number(d.amount) > 0)) throw new Error('Le montant doit être supérieur à 0.');
+      if (d.currency !== 'USD' && d.currency !== 'FC') throw new Error('Choisissez la devise : USD ou FC.');
 
       var photosRes = await photosAEnregistrer(binders, photos);
-      var payload = { content: contenuDuFormulaire(d), photos: photosRes.kept, statut: publier ? 'publiee' : 'brouillon' };
-
-      if (nouveau) {
-        /* La base crée le projet et sa présentation en une seule opération (et reprend une présentation en attente). */
-        var retour = await DP.api.rpc('presentation_creer_projet', {
-          p_amount: Number(d.amount), p_currency: d.currency, p_content: payload.content,
-          p_photos: payload.photos, p_statut: payload.statut
-        });
-        supprimerAnciennesPhotos(photosRes.replaced);
-        var nouveauId = typeof retour === 'string' ? retour : (retour && retour.id);
-        if (!nouveauId) throw new Error('Le projet n’a pas pu être créé. Réessayez.');
-        location.hash = '#/espace/presentation/' + nouveauId;
-        return publier
-          ? 'Projet créé et présentation publiée. L’administrateur va la vérifier.'
-          : 'Projet créé. Le brouillon de présentation est enregistré.';
-      }
-
-      payload.updated_at = new Date().toISOString();
-      var updated = await DP.api.update('presentations', { project_id: 'eq.' + projectId }, payload);
-      if (!updated || !updated.length) {
-        await DP.api.insert('presentations', Object.assign({ user_id: DP.api.uid, project_id: projectId }, payload));
-      }
+      /* La base enregistre le projet (créé ou modifié) et sa présentation en une seule opération.
+         Une présentation rédigée sans projet est reprise à la création. */
+      var retour = await DP.api.rpc('presentation_enregistrer', {
+        p_projet: nouveau ? null : projectId,
+        p_amount: Number(d.amount),
+        p_currency: d.currency,
+        p_content: contenuDuFormulaire(d),
+        p_photos: photosRes.kept,
+        p_statut: publier ? 'publiee' : 'brouillon',
+        p_sector: d.sector || null,
+        p_establishment_id: d.establishment_id || null,
+        p_description: d.description || null,
+        p_use_of_funds: d.use_of_funds || null,
+        p_due_date: d.due_date || null
+      });
       supprimerAnciennesPhotos(photosRes.replaced);
-      DP.navigate();
-      return publier
-        ? 'Présentation publiée. L’administrateur va la vérifier.'
-        : 'Brouillon enregistré. Seul vous le voyez.';
+      var projetId = typeof retour === 'string' ? retour : (retour && retour.id);
+      if (!projetId) throw new Error('Le projet n’a pas pu être enregistré. Réessayez.');
+
+      var message = publier
+        ? (nouveau ? 'Projet créé et présentation publiée. L’administrateur va la vérifier.' : 'Présentation publiée. L’administrateur va la vérifier.')
+        : (nouveau ? 'Projet créé. Le brouillon de présentation est enregistré.' : 'Brouillon enregistré. Seul vous le voyez.');
+      if (nouveau) {
+        location.hash = '#/espace/presentation/' + projetId;
+      } else {
+        DP.navigate();
+      }
+      return message;
     });
   }
 

@@ -516,55 +516,31 @@
     if (!b) return noBen(el, 'Mes projets et besoins');
     var r = await Promise.all([
       DP.api.get('projects', { select: '*', beneficiary_id: 'eq.' + b.id, order: 'created_at.desc' }),
-      loadEntreprises(b),
       DP.api.get('presentations', { select: 'project_id,statut', user_id: 'eq.' + DP.api.uid })
     ]);
     var rows = r[0];
-    /* Le serveur n'accepte de lier un projet qu'à une entreprise créée par ce bénéficiaire. */
-    var mine = r[1].filter(function (e) { return e.created_by === DP.api.uid; });
-    /* Une présentation par projet : son statut s'affiche dans la liste, avec un lien pour la rédiger. */
+    /* Une présentation par projet : son statut s'affiche dans la liste, avec un lien pour la rédiger ou la modifier. */
     var presParProjet = {};
-    r[2].forEach(function (pr) { if (pr.project_id) presParProjet[pr.project_id] = pr; });
+    r[1].forEach(function (pr) { if (pr.project_id) presParProjet[pr.project_id] = pr; });
     /* Présentation rédigée sans projet (avant le montant) : à reprendre depuis « Présenter mon projet ». */
-    var enAttente = r[2].some(function (pr) { return !pr.project_id; });
+    var enAttente = r[1].some(function (pr) { return !pr.project_id; });
     var PRES_LIBELLE = { brouillon: 'Brouillon', publiee: 'Publiée, à vérifier', visible: 'Visible des partenaires' };
-    el.innerHTML = ui.header('Mes projets et besoins', 'Décrivez votre activité et votre besoin. Chaque projet a sa propre présentation pour les partenaires ; votre Agent ou votre Hôte vérifie le dossier avant de le rendre présentable.') +
+    el.innerHTML = ui.header('Mes projets et besoins', 'Chaque projet a sa présentation pour les partenaires. Pour créer un projet, utilisez « Présenter mon projet » : le projet et sa présentation s’enregistrent ensemble. Votre Agent ou votre Hôte vérifie le dossier avant de le rendre présentable.') +
       (enAttente ? ui.alert('info', '<strong>Une présentation attend son projet.</strong> Vous l’avez rédigée sans indiquer de montant. ' +
         '<a href="#/espace/presentation/nouveau">Indiquez le montant demandé</a> pour créer le projet ici.') : '') +
-      '<div class="grid-2">' +
-      ui.card('Nouveau projet ou besoin', '<form class="form" id="f-proj">' +
-        ui.field({ name: 'title', label: 'Intitulé', required: true, full: true }) +
-        ui.field({ name: 'establishment_id', label: 'Entreprise concernée', type: 'select', options: mine.map(function (e) { return [e.id, e.name]; }), placeholder: 'Aucune entreprise précise', dataType: 'nullable', full: true, hint: mine.length ? '' : 'Ajoutez d’abord votre entreprise dans « Mes entreprises », si ce projet la concerne.' }) +
-        '<div class="field-row">' + ui.field({ name: 'sector', label: 'Secteur d’activité', placeholder: 'ex. commerce, agriculture' }) +
-        ui.field({ name: 'currency', label: 'Devise', type: 'select', options: [['USD', 'USD'], ['FC', 'FC']], value: 'USD' }) + '</div>' +
-        '<div class="field-row">' + ui.field({ name: 'amount', label: 'Montant nécessaire', type: 'number', dataType: 'number', step: 'any', min: 0.01, required: true }) +
-        ui.field({ name: 'due_date', label: 'Échéance souhaitée', type: 'date', dataType: 'nullable' }) + '</div>' +
-        ui.field({ name: 'description', label: 'Votre activité et ce projet', type: 'textarea', rows: 4, full: true, dataType: 'nullable' }) +
-        ui.field({ name: 'use_of_funds', label: 'À quoi serviront les fonds ?', type: 'textarea', rows: 3, full: true, dataType: 'nullable' }) +
-        '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer le brouillon</button></div></form>') +
-      ui.card('Mes projets', ui.table([
-        { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
-        { label: 'Montant', cls: 'num', render: function (p) { return ui.money(p.amount, p.currency); } },
-        { label: 'Échéance', render: function (p) { return ui.date(p.due_date); } },
-        { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
-        { label: 'Présentation', render: function (p) {
-          var pr = presParProjet[p.id];
-          var etat = pr ? '<span class="small">' + esc(PRES_LIBELLE[pr.statut] || pr.statut) + '</span>' : '<span class="small muted">Pas encore rédigée</span>';
-          return etat + '<div><a class="btn btn-sm btn-blue" href="#/espace/presentation/' + esc(p.id) + '">' + (pr ? 'Modifier' : 'Rédiger') + '</a></div>';
-        } }
-      ], rows, 'Aucun projet pour le moment. Créez votre premier besoin à gauche.')) + '</div>';
-
-    ui.bindForm(el.querySelector('#f-proj'), async function (d) {
-      if (!(d.amount > 0)) throw new Error('Le montant doit être supérieur à 0.');
-      await DP.api.insert('projects', {
-        beneficiary_id: b.id, created_by: DP.api.uid, title: d.title, sector: d.sector || null,
-        establishment_id: d.establishment_id || null,
-        description: d.description || null, amount: d.amount, currency: d.currency,
-        use_of_funds: d.use_of_funds || null, due_date: d.due_date || null, status: 'draft'
-      });
-      refresh();
-      return 'Projet enregistré en brouillon.';
-    });
+      ui.card('Mes projets',
+        '<div class="form-actions"><a class="btn btn-primary" href="#/espace/presentation/nouveau">Présenter mon projet</a></div>' +
+        ui.table([
+          { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
+          { label: 'Montant', cls: 'num', render: function (p) { return ui.money(p.amount, p.currency); } },
+          { label: 'Échéance', render: function (p) { return ui.date(p.due_date); } },
+          { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
+          { label: 'Présentation', render: function (p) {
+            var pr = presParProjet[p.id];
+            var etat = pr ? '<span class="small">' + esc(PRES_LIBELLE[pr.statut] || pr.statut) + '</span>' : '<span class="small muted">Pas encore rédigée</span>';
+            return etat + '<div><a class="btn btn-sm btn-blue" href="#/espace/presentation/' + esc(p.id) + '">' + (pr ? 'Modifier' : 'Rédiger') + '</a></div>';
+          } }
+        ], rows, 'Aucun projet pour le moment. Cliquez sur « Présenter mon projet » pour décrire votre projet et votre besoin.'));
   }
 
   /* ---------- Dossiers et consentements ---------- */
