@@ -1,14 +1,16 @@
 /* Test de « Présenter mon projet » (espace bénéficiaire) — réponses simulées, aucun appel réel à Supabase :
    Une présentation par projet : elle s'ouvre depuis « Mes projets et besoins » (#/espace/presentation/<projet>).
-   1) accueil, catégorie non acceptée : bouton bleu « Mes projets et besoins » sous le bouton vert « Ouvrir Ma catégorie » ;
-   2) accueil, catégorie acceptée : carte « Vos projets et leurs présentations » avec le bouton bleu ;
+   1) accueil, catégorie non acceptée : bouton bleu « Présenter mon projet » sous le bouton vert « Ouvrir Ma catégorie » ;
+   2) accueil, catégorie acceptée : carte « Vos projets et leurs présentations » avec le bouton bleu « Présenter mon projet » ;
    3) présentation du projet : 11 rubriques, chacune avec une aide et un exemple ; 4 emplacements photo ;
    4) titre trop long : message, aucune demande envoyée ;
    5) « Enregistrer comme brouillon » : texte et photo envoyés (dossier du bénéficiaire), statut « brouillon » ;
    6) « Publier » incomplet : refusé, les rubriques manquantes sont nommées, rien n’est envoyé ;
    7) « Publier » complet : statut « publiée » envoyé, bannière « Publiée le » à la nouvelle visite ;
    8) nouvelle visite : les réponses et la photo enregistrées sont réaffichées ;
-   9) aucune erreur JavaScript et aucun « undefined », « null » ou « NaN ».
+   9) aucune erreur JavaScript et aucun « undefined », « null » ou « NaN » ;
+   10) « Présenter mon projet » : montant obligatoire, puis création du projet (fonction de la base) et redirection ;
+   11) « Présenter mon projet » reprend une présentation rédigée sans projet ; la liste des projets le signale (12).
    Usage :
      1) servir le dossier :  python3 -m http.server 8765   (depuis le dossier DarajaPlus)
      2) lancer le test   :  node tests/presentation.js     (variable BASE pour une autre adresse)
@@ -97,6 +99,7 @@ async function openContext(browser, opts) {
     }
     if (p.indexOf('/storage/v1/object/sign/') === 0) return reply({ signedURL: '/object/sign/visuels/photo.png?token=t' });
     if (p.indexOf('/storage/v1/object/visuels/') === 0) return reply({ Key: 'visuels' + p.slice('/storage/v1/object/visuels'.length) });
+    if (p === '/rest/v1/rpc/presentation_creer_projet') return reply(PROJECT_ID);
     if (p.indexOf('/rest/v1/rpc/') === 0) return reply({});
     return reply([]);
   });
@@ -136,10 +139,10 @@ async function bodyText(page) {
     /* 1) Accueil : catégorie non acceptée */
     const c1 = await openContext(browser, { category: null });
     const h1 = await visit(c1, '#/espace');
-    const blue1 = h1.page.locator('a.btn-blue[href="#/espace/projets"]');
+    const blue1 = h1.page.locator('a.btn-blue[href="#/espace/presentation/nouveau"]');
     /* Le bouton vert de la carte « Étape 1 » (et non le lien « Ma catégorie » des accès rapides) */
     const green1 = h1.page.locator('a.btn-primary:has-text("Ouvrir « Ma catégorie »")');
-    check('accueil (catégorie non acceptée) : bouton bleu « Mes projets et besoins » présent', (await blue1.count()) === 1);
+    check('accueil (catégorie non acceptée) : bouton bleu « Présenter mon projet » présent', (await blue1.count()) === 1);
     check('accueil : bouton bleu affiché sous le bouton vert « Ouvrir Ma catégorie »',
       (await blue1.count()) === 1 && (await green1.count()) === 1 &&
       (await blue1.boundingBox()).y > (await green1.boundingBox()).y);
@@ -149,8 +152,8 @@ async function bodyText(page) {
     /* 2) Accueil : catégorie acceptée (la carte « Étape 1 » disparaît) */
     const c2 = await openContext(browser, { category: 'ba' });
     const h2 = await visit(c2, '#/espace');
-    check('accueil (catégorie acceptée) : carte « Vos projets et leurs présentations » avec le bouton bleu',
-      (await h2.page.locator('a.btn-blue[href="#/espace/projets"]').count()) === 1 && h2.text.indexOf('Vos projets et leurs présentations') !== -1);
+    check('accueil (catégorie acceptée) : carte « Vos projets et leurs présentations » avec le bouton bleu « Présenter mon projet »',
+      (await h2.page.locator('a.btn-blue[href="#/espace/presentation/nouveau"]').count()) === 1 && h2.text.indexOf('Vos projets et leurs présentations') !== -1);
 
     /* 3) Présentation du projet : rubriques, exemples, photos */
     const c3 = await openContext(browser, { category: 'ba' });
@@ -222,6 +225,45 @@ async function bodyText(page) {
     check('liste des projets : le lien vers la présentation du projet est présent', (await lien9.count()) === 1);
     check('liste des projets : l’état « Publiée, à vérifier » est affiché', p9.text.indexOf('Publiée, à vérifier') !== -1);
     check('liste des projets : aucune erreur JavaScript', p9.errors.length === 0, p9.errors.join(' | '));
+    /* 10) « Présenter mon projet » : montant obligatoire, puis création du projet et redirection vers sa présentation */
+    const c10 = await openContext(browser, { category: 'ba' });
+    const p10 = await visit(c10, '#/espace/presentation/nouveau');
+    check('nouveau : titre « Présenter mon projet »', p10.text.indexOf('Présenter mon projet') !== -1);
+    check('nouveau : champs « Montant nécessaire » et « Devise » présents',
+      (await p10.page.locator('#f-pres input[name="amount"]').count()) === 1 && (await p10.page.locator('#f-pres select[name="currency"]').count()) === 1);
+    check('nouveau : aucune erreur JavaScript', p10.errors.length === 0, p10.errors.join(' | '));
+    await p10.page.locator('#f-pres input[name="titre"]').fill('Kiosque test');
+    await p10.page.locator('#f-pres button[data-cible="brouillon"]').click();
+    const sansMontant = await until(async () => (await bodyText(p10.page)).indexOf('Le montant doit être supérieur à 0') !== -1, 5000);
+    check('nouveau : montant vide refusé', sansMontant);
+    check('nouveau : montant vide, rien n’est envoyé', c10.__log.filter((e) => e.path === '/rest/v1/rpc/presentation_creer_projet').length === 0);
+    await p10.page.locator('#f-pres input[name="amount"]').fill('2500');
+    await p10.page.locator('#f-pres button[data-cible="brouillon"]').click();
+    const cree = await until(async () => p10.page.url().indexOf('#/espace/presentation/' + PROJECT_ID) !== -1, 15000);
+    check('nouveau : après enregistrement, redirection vers la présentation du projet créé', cree, p10.page.url());
+    const appel = c10.__log.filter((e) => e.path === '/rest/v1/rpc/presentation_creer_projet');
+    check('nouveau : un seul appel de la fonction de création', appel.length === 1);
+    const corps = appel.length ? appel[0].body : '';
+    check('nouveau : montant, devise et statut envoyés',
+      corps.indexOf('"p_amount":2500') !== -1 && corps.indexOf('"p_currency":"USD"') !== -1 && corps.indexOf('"p_statut":"brouillon"') !== -1, corps.slice(0, 200));
+    check('nouveau : titre envoyé dans le contenu', corps.indexOf('Kiosque test') !== -1);
+    check('nouveau : aucune écriture directe dans presentations', c10.__log.filter((e) => e.path === '/rest/v1/presentations' && e.method !== 'GET').length === 0);
+
+    /* 11) « Présenter mon projet » reprend une présentation rédigée sans projet (avant le montant) */
+    const c11 = await openContext(browser, { category: 'ba', row: { user_id: USER_ID, project_id: null, statut: 'publiee',
+      publiee_at: '2026-11-12T09:00:00Z', content: { titre: 'Projet en attente', probleme: 'Problème de test.' }, photos: [] } });
+    const p11 = await visit(c11, '#/espace/presentation/nouveau');
+    const titre11 = await p11.page.locator('#f-pres input[name="titre"]').inputValue().catch(() => '');
+    check('nouveau (présentation en attente) : le titre déjà rédigé est repris', titre11 === 'Projet en attente', titre11);
+    check('nouveau (présentation en attente) : message « sera reprise »', p11.text.indexOf('sera reprise pour ce projet') !== -1);
+    check('nouveau (présentation en attente) : aucune erreur JavaScript', p11.errors.length === 0, p11.errors.join(' | '));
+
+    /* 12) Liste des projets : une présentation sans projet demande le montant */
+    const p12 = await visit(c11, '#/espace/projets');
+    check('liste des projets : présentation sans projet signalée', p12.text.indexOf('Une présentation attend son projet') !== -1);
+    check('liste des projets : lien « Indiquez le montant demandé » vers la création',
+      (await p12.page.locator('a[href="#/espace/presentation/nouveau"]').count()) >= 1);
+    check('liste des projets (présentation en attente) : aucune erreur JavaScript', p12.errors.length === 0, p12.errors.join(' | '));
   } catch (e) {
     failures++;
     console.log('FAIL exception : ' + (e && e.message ? e.message : e));

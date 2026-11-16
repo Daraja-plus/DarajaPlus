@@ -1,4 +1,4 @@
-/* DarajaPlus — « Présenter mon projet » (espace bénéficiaire) : une fiche par projet, rédigée depuis « Mes projets et besoins ».
+/* DarajaPlus — « Présenter mon projet » (espace bénéficiaire) : une fiche par projet. « Présenter mon projet » crée le projet et sa fiche ; la fiche se modifie ensuite depuis « Mes projets et besoins ».
    Une fiche rédigée rubrique par rubrique, en quelques lignes, avec 1 à 4 photos du produit ou des réalisations.
    Chaque rubrique a une aide et un exemple fictif.
    Trois statuts : « brouillon » (seul le bénéficiaire voit la fiche), « publiée » (l'administrateur la vérifie),
@@ -52,6 +52,69 @@
     return rows[0] || null;
   }
 
+  /* Une présentation rédigée sans projet (avant le montant) : elle est reprise par « Présenter mon projet ». */
+  async function loadEnAttente() {
+    var rows = await DP.api.get('presentations', { select: '*', user_id: 'eq.' + DP.api.uid, project_id: 'is.null', order: 'updated_at.desc', limit: 1 });
+    return rows[0] || null;
+  }
+
+  function montantCard() {
+    return ui.card('Le besoin', '<p class="small muted">Le montant sert à créer votre projet. Ce n’est pas une promesse de financement.</p>' +
+      '<div class="field-row">' +
+      ui.field({ name: 'amount', label: 'Montant nécessaire', type: 'number', dataType: 'number', step: 'any', min: 0.01, required: true }) +
+      ui.field({ name: 'currency', label: 'Devise', type: 'select', options: [['USD', 'USD'], ['FC', 'FC']], value: 'USD' }) +
+      '</div>');
+  }
+
+  function alerteNouveau(row) {
+    return ui.alert('info', '<strong>Nouveau projet.</strong> Indiquez le montant demandé et la devise, puis enregistrez. ' +
+      (row ? 'Votre présentation déjà rédigée sera reprise pour ce projet.' : 'Le projet apparaît ensuite dans « Mes projets et besoins ».'));
+  }
+
+  /* Contrôles communs aux deux écrans : longueur des rubriques, puis rubriques complètes si la fiche est publiée. */
+  function verifierRubriques(d, publier) {
+    SECTIONS.forEach(function (s) {
+      var max = s.key === 'titre' ? TITLE_MAX : TEXT_MAX;
+      if ((d[s.key] || '').length > max) {
+        throw new Error('« ' + s.label + ' » dépasse ' + max + ' caractères. Raccourcissez le texte.');
+      }
+    });
+    if (publier) {
+      var manque = SECTIONS.filter(function (s) { return !String(d[s.key] || '').trim(); }).map(function (s) { return s.label; });
+      if (manque.length) {
+        throw new Error('Pour publier, remplissez encore : ' + manque.join(', ') + '.');
+      }
+    }
+  }
+
+  function contenuDuFormulaire(d) {
+    var contenu = {};
+    SECTIONS.forEach(function (s) { contenu[s.key] = d[s.key] || ''; });
+    return contenu;
+  }
+
+  /* Une photo choisie remplace celle de son emplacement ; sinon l'ancienne est gardée. */
+  async function photosAEnregistrer(binders, anciennes) {
+    var kept = [];
+    var replaced = [];
+    for (var k = 0; k < PHOTO_SLOTS; k++) {
+      var file = binders[k].file();
+      if (file) {
+        kept.push(await DP.photo.upload(file));
+        if (anciennes[k]) replaced.push(anciennes[k]);
+      } else if (anciennes[k]) {
+        kept.push(anciennes[k]);
+      }
+    }
+    return { kept: kept, replaced: replaced };
+  }
+
+  /* Anciennes photos remplacées : supprimées du stockage (uniquement celles du dossier du bénéficiaire). */
+  function supprimerAnciennesPhotos(replaced) {
+    var old = replaced.filter(function (p) { return p.indexOf(DP.api.uid + '/') === 0; });
+    if (old.length) DP.api.removeFrom('visuels', old).catch(function () {});
+  }
+
   function fieldFor(s, value) {
     if (s.key === 'titre') {
       return ui.field({ name: s.key, label: 'Votre réponse', value: value, placeholder: 'Nom du projet',
@@ -95,23 +158,36 @@
   }
 
   async function renderPresentation(el, ctx) {
-    var projectId = ctx.params.id;
-    var projet = await loadProjet(projectId);
-    if (!projet) {
-      el.innerHTML = ui.header('Présentation du projet', '') + ui.card(null, ui.empty('Ce projet n’existe pas, ou il ne vous appartient pas.'));
-      return;
+    /* « nouveau » : Présenter mon projet crée le projet ; sinon on rédige la présentation d'un projet existant. */
+    var nouveau = ctx.params.id === 'nouveau';
+    var projectId = nouveau ? null : ctx.params.id;
+    var projet = null;
+    var row = null;
+    if (nouveau) {
+      row = await loadEnAttente();
+    } else {
+      projet = await loadProjet(projectId);
+      if (!projet) {
+        el.innerHTML = ui.header('Présentation du projet', '') + ui.card(null, ui.empty('Ce projet n’existe pas, ou il ne vous appartient pas.'));
+        return;
+      }
+      row = await loadRow(projectId);
     }
-    var row = await loadRow(projectId);
     var content = (row && row.content) || {};
     var photos = (row && row.photos) || [];
     var urls = await Promise.all(photos.map(function (p) {
       return DP.api.signedUrlFor('visuels', p, 3600).catch(function () { return ''; });
     }));
 
-    el.innerHTML = ui.header('Présentation : ' + projet.title, 'Rédigez ce projet rubrique par rubrique, en quelques lignes : clair, concis et précis. Chaque projet a sa propre présentation.') +
-      statusAlert(row) +
+    var titre = nouveau ? 'Présenter mon projet' : 'Présentation : ' + projet.title;
+    var intro = nouveau
+      ? 'Rédigez votre projet rubrique par rubrique. Le montant demandé crée votre projet dans « Mes projets et besoins ».'
+      : 'Rédigez ce projet rubrique par rubrique, en quelques lignes : clair, concis et précis. Chaque projet a sa propre présentation.';
+    el.innerHTML = ui.header(titre, intro) +
+      (nouveau ? alerteNouveau(row) : statusAlert(row)) +
       '<form class="form" id="f-pres" data-reset="false" novalidate>' +
         '<input type="hidden" name="cible" value="brouillon">' +
+        (nouveau ? montantCard() : '') +
         SECTIONS.map(function (s, i) {
           return sectionCard(s, i, content[s.key] || '', s.photos ? photosHtml(urls) : '');
         }).join('') +
@@ -135,42 +211,37 @@
 
     ui.bindForm(form, async function (d) {
       var publier = d.cible === 'publiee';
-      SECTIONS.forEach(function (s) {
-        var max = s.key === 'titre' ? TITLE_MAX : TEXT_MAX;
-        if ((d[s.key] || '').length > max) {
-          throw new Error('« ' + s.label + ' » dépasse ' + max + ' caractères. Raccourcissez le texte.');
-        }
-      });
-      if (publier) {
-        var manque = SECTIONS.filter(function (s) { return !String(d[s.key] || '').trim(); }).map(function (s) { return s.label; });
-        if (manque.length) {
-          throw new Error('Pour publier, remplissez encore : ' + manque.join(', ') + '.');
-        }
-      }
-      var newContent = {};
-      SECTIONS.forEach(function (s) { newContent[s.key] = d[s.key] || ''; });
-
-      /* Une photo choisie remplace celle de son emplacement ; sinon l'ancienne est gardée. */
-      var kept = [];
-      var replaced = [];
-      for (var k = 0; k < PHOTO_SLOTS; k++) {
-        var file = binders[k].file();
-        if (file) {
-          kept.push(await DP.photo.upload(file));
-          if (photos[k]) replaced.push(photos[k]);
-        } else if (photos[k]) {
-          kept.push(photos[k]);
-        }
+      verifierRubriques(d, publier);
+      if (nouveau) {
+        if (!String(d.titre || '').trim()) throw new Error('Le titre du projet est obligatoire.');
+        if (!(Number(d.amount) > 0)) throw new Error('Le montant doit être supérieur à 0.');
+        if (d.currency !== 'USD' && d.currency !== 'FC') throw new Error('Choisissez la devise : USD ou FC.');
       }
 
-      var payload = { content: newContent, photos: kept, statut: publier ? 'publiee' : 'brouillon', updated_at: new Date().toISOString() };
+      var photosRes = await photosAEnregistrer(binders, photos);
+      var payload = { content: contenuDuFormulaire(d), photos: photosRes.kept, statut: publier ? 'publiee' : 'brouillon' };
+
+      if (nouveau) {
+        /* La base crée le projet et sa présentation en une seule opération (et reprend une présentation en attente). */
+        var retour = await DP.api.rpc('presentation_creer_projet', {
+          p_amount: Number(d.amount), p_currency: d.currency, p_content: payload.content,
+          p_photos: payload.photos, p_statut: payload.statut
+        });
+        supprimerAnciennesPhotos(photosRes.replaced);
+        var nouveauId = typeof retour === 'string' ? retour : (retour && retour.id);
+        if (!nouveauId) throw new Error('Le projet n’a pas pu être créé. Réessayez.');
+        location.hash = '#/espace/presentation/' + nouveauId;
+        return publier
+          ? 'Projet créé et présentation publiée. L’administrateur va la vérifier.'
+          : 'Projet créé. Le brouillon de présentation est enregistré.';
+      }
+
+      payload.updated_at = new Date().toISOString();
       var updated = await DP.api.update('presentations', { project_id: 'eq.' + projectId }, payload);
       if (!updated || !updated.length) {
         await DP.api.insert('presentations', Object.assign({ user_id: DP.api.uid, project_id: projectId }, payload));
       }
-      /* Anciennes photos remplacées : supprimées du stockage (uniquement celles du dossier du bénéficiaire). */
-      var old = replaced.filter(function (p) { return p.indexOf(DP.api.uid + '/') === 0; });
-      if (old.length) DP.api.removeFrom('visuels', old).catch(function () {});
+      supprimerAnciennesPhotos(photosRes.replaced);
       DP.navigate();
       return publier
         ? 'Présentation publiée. L’administrateur va la vérifier.'

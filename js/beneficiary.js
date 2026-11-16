@@ -105,11 +105,11 @@
           : 'Lisez les avantages, les limites et les exigences de chaque catégorie, puis faites votre choix.');
       step = ui.card('Étape 1 : votre catégorie', '<p>' + txt + '</p>' +
         '<div class="btn-row"><a class="btn btn-primary" href="#/espace/categorie">Ouvrir « Ma catégorie »</a></div>' +
-        '<div class="btn-row"><a class="btn btn-blue" href="#/espace/projets">Mes projets et besoins</a></div>');
+        '<div class="btn-row"><a class="btn btn-blue" href="#/espace/presentation/nouveau">Présenter mon projet</a></div>');
     }
     /* Sans carte « Étape 1 » (catégorie acceptée), les présentations restent accessibles dans leur propre carte. */
-    var presentation = step ? '' : ui.card('Vos projets et leurs présentations', '<p class="small muted">Chaque projet a sa propre présentation, rubrique par rubrique. Rédigez-la depuis « Mes projets et besoins ».</p>' +
-      '<div class="btn-row"><a class="btn btn-blue" href="#/espace/projets">Mes projets et besoins</a></div>');
+    var presentation = step ? '' : ui.card('Vos projets et leurs présentations', '<p class="small muted">Chaque projet a sa propre présentation, rubrique par rubrique. « Présenter mon projet » crée un projet et sa présentation ; « Mes projets et besoins » liste vos projets existants.</p>' +
+      '<div class="btn-row"><a class="btn btn-blue" href="#/espace/presentation/nouveau">Présenter mon projet</a> <a class="btn btn-outline" href="#/espace/projets">Mes projets et besoins</a></div>');
 
     el.innerHTML = ui.header('Bonjour ' + (b.prenom || '') + ' !', statusText) + step + presentation +
       ui.card(null, '<dl class="kv">' +
@@ -525,8 +525,12 @@
     /* Une présentation par projet : son statut s'affiche dans la liste, avec un lien pour la rédiger. */
     var presParProjet = {};
     r[2].forEach(function (pr) { if (pr.project_id) presParProjet[pr.project_id] = pr; });
+    /* Présentation rédigée sans projet (avant le montant) : à reprendre depuis « Présenter mon projet ». */
+    var enAttente = r[2].some(function (pr) { return !pr.project_id; });
     var PRES_LIBELLE = { brouillon: 'Brouillon', publiee: 'Publiée, à vérifier', visible: 'Visible des partenaires' };
     el.innerHTML = ui.header('Mes projets et besoins', 'Décrivez votre activité et votre besoin. Chaque projet a sa propre présentation pour les partenaires ; votre Agent ou votre Hôte vérifie le dossier avant de le rendre présentable.') +
+      (enAttente ? ui.alert('info', '<strong>Une présentation attend son projet.</strong> Vous l’avez rédigée sans indiquer de montant. ' +
+        '<a href="#/espace/presentation/nouveau">Indiquez le montant demandé</a> pour créer le projet ici.') : '') +
       '<div class="grid-2">' +
       ui.card('Nouveau projet ou besoin', '<form class="form" id="f-proj">' +
         ui.field({ name: 'title', label: 'Intitulé', required: true, full: true }) +
