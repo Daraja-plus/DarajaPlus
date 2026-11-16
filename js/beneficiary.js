@@ -105,11 +105,11 @@
           : 'Lisez les avantages, les limites et les exigences de chaque catégorie, puis faites votre choix.');
       step = ui.card('Étape 1 : votre catégorie', '<p>' + txt + '</p>' +
         '<div class="btn-row"><a class="btn btn-primary" href="#/espace/categorie">Ouvrir « Ma catégorie »</a></div>' +
-        '<div class="btn-row"><a class="btn btn-blue" href="#/espace/presentation">Présenter mon projet</a></div>');
+        '<div class="btn-row"><a class="btn btn-blue" href="#/espace/projets">Mes projets et besoins</a></div>');
     }
-    /* Sans carte « Étape 1 » (catégorie acceptée), la présentation reste accessible dans sa propre carte. */
-    var presentation = step ? '' : ui.card('Votre présentation', '<p class="small muted">Rédigez la présentation de votre projet, rubrique par rubrique.</p>' +
-      '<div class="btn-row"><a class="btn btn-blue" href="#/espace/presentation">Présenter mon projet</a></div>');
+    /* Sans carte « Étape 1 » (catégorie acceptée), les présentations restent accessibles dans leur propre carte. */
+    var presentation = step ? '' : ui.card('Vos projets et leurs présentations', '<p class="small muted">Chaque projet a sa propre présentation, rubrique par rubrique. Rédigez-la depuis « Mes projets et besoins ».</p>' +
+      '<div class="btn-row"><a class="btn btn-blue" href="#/espace/projets">Mes projets et besoins</a></div>');
 
     el.innerHTML = ui.header('Bonjour ' + (b.prenom || '') + ' !', statusText) + step + presentation +
       ui.card(null, '<dl class="kv">' +
@@ -516,12 +516,17 @@
     if (!b) return noBen(el, 'Mes projets et besoins');
     var r = await Promise.all([
       DP.api.get('projects', { select: '*', beneficiary_id: 'eq.' + b.id, order: 'created_at.desc' }),
-      loadEntreprises(b)
+      loadEntreprises(b),
+      DP.api.get('presentations', { select: 'project_id,statut', user_id: 'eq.' + DP.api.uid })
     ]);
     var rows = r[0];
     /* Le serveur n'accepte de lier un projet qu'à une entreprise créée par ce bénéficiaire. */
     var mine = r[1].filter(function (e) { return e.created_by === DP.api.uid; });
-    el.innerHTML = ui.header('Mes projets et besoins', 'Décrivez votre activité et votre besoin. Votre Agent ou votre Hôte vérifie le dossier avant de le rendre présentable aux partenaires.') +
+    /* Une présentation par projet : son statut s'affiche dans la liste, avec un lien pour la rédiger. */
+    var presParProjet = {};
+    r[2].forEach(function (pr) { if (pr.project_id) presParProjet[pr.project_id] = pr; });
+    var PRES_LIBELLE = { brouillon: 'Brouillon', publiee: 'Publiée, à vérifier', visible: 'Visible des partenaires' };
+    el.innerHTML = ui.header('Mes projets et besoins', 'Décrivez votre activité et votre besoin. Chaque projet a sa propre présentation pour les partenaires ; votre Agent ou votre Hôte vérifie le dossier avant de le rendre présentable.') +
       '<div class="grid-2">' +
       ui.card('Nouveau projet ou besoin', '<form class="form" id="f-proj">' +
         ui.field({ name: 'title', label: 'Intitulé', required: true, full: true }) +
@@ -537,7 +542,12 @@
         { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
         { label: 'Montant', cls: 'num', render: function (p) { return ui.money(p.amount, p.currency); } },
         { label: 'Échéance', render: function (p) { return ui.date(p.due_date); } },
-        { label: 'Statut', render: function (p) { return ui.badge(p.status); } }
+        { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
+        { label: 'Présentation', render: function (p) {
+          var pr = presParProjet[p.id];
+          var etat = pr ? '<span class="small">' + esc(PRES_LIBELLE[pr.statut] || pr.statut) + '</span>' : '<span class="small muted">Pas encore rédigée</span>';
+          return etat + '<div><a class="btn btn-sm btn-blue" href="#/espace/presentation/' + esc(p.id) + '">' + (pr ? 'Modifier' : 'Rédiger') + '</a></div>';
+        } }
       ], rows, 'Aucun projet pour le moment. Créez votre premier besoin à gauche.')) + '</div>';
 
     ui.bindForm(el.querySelector('#f-proj'), async function (d) {

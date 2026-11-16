@@ -1,7 +1,8 @@
 /* Test de « Présenter mon projet » (espace bénéficiaire) — réponses simulées, aucun appel réel à Supabase :
-   1) accueil, catégorie non acceptée : bouton bleu « Présenter mon projet » sous le bouton vert « Ouvrir Ma catégorie » ;
-   2) accueil, catégorie acceptée : carte « Votre présentation » avec le bouton bleu ;
-   3) page : 11 rubriques, chacune avec une aide et un exemple ; 4 emplacements photo ;
+   Une présentation par projet : elle s'ouvre depuis « Mes projets et besoins » (#/espace/presentation/<projet>).
+   1) accueil, catégorie non acceptée : bouton bleu « Mes projets et besoins » sous le bouton vert « Ouvrir Ma catégorie » ;
+   2) accueil, catégorie acceptée : carte « Vos projets et leurs présentations » avec le bouton bleu ;
+   3) présentation du projet : 11 rubriques, chacune avec une aide et un exemple ; 4 emplacements photo ;
    4) titre trop long : message, aucune demande envoyée ;
    5) « Enregistrer comme brouillon » : texte et photo envoyés (dossier du bénéficiaire), statut « brouillon » ;
    6) « Publier » incomplet : refusé, les rubriques manquantes sont nommées, rien n’est envoyé ;
@@ -19,6 +20,7 @@ const BASE = process.env.BASE || 'http://127.0.0.1:8765/';
 const SB = 'https://nfcfwvrllacpvlcsoycp.supabase.co';
 const USER_ID = '22222222-2222-4222-8222-222222222222';
 const AGENT_ID = '33333333-3333-4333-8333-333333333333';
+const PROJECT_ID = '44444444-4444-4444-8444-444444444444';
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };
 const BAD = /\b(undefined|null|NaN)\b/;
 const TINY_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
@@ -51,7 +53,13 @@ function ben(category) {
     agent_id: category ? AGENT_ID : null, host_id: null, sponsor_id: null, quartier_id: null, created_at: '2026-11-12T08:00:00Z' };
 }
 
-/* opts : { category, row } ; context.__state.row = fiche enregistrée (ou null) ; context.__log = requêtes */
+function projet(category) {
+  return { id: PROJECT_ID, beneficiary_id: 'b-1', created_by: USER_ID, title: 'Kiosque solaire', sector: 'énergie',
+    description: null, use_of_funds: null, amount: 3000, currency: 'USD', due_date: null, establishment_id: null,
+    status: category ? 'ready' : 'draft', created_at: '2026-11-13T08:00:00Z' };
+}
+
+/* opts : { category, row } ; context.__state.row = présentation enregistrée du projet (ou null) ; context.__log = requêtes */
 async function openContext(browser, opts) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   const state = { row: (opts && opts.row) || null };
@@ -70,6 +78,7 @@ async function openContext(browser, opts) {
     if (p === '/auth/v1/user') return reply({ id: USER_ID, email: 'ben@test.local', aud: 'authenticated' });
     if (p === '/rest/v1/profiles') return m === 'PATCH' ? reply([{}]) : reply([profile()]);
     if (p === '/rest/v1/beneficiaries') return reply([ben(opts && opts.category)]);
+    if (p === '/rest/v1/projects') return reply([projet(opts && opts.category)]);
     if (p === '/rest/v1/rpc/beneficiary_category_state') return reply({});
     if (p === '/rest/v1/presentations') {
       if (m === 'GET') return reply(state.row ? [state.row] : []);
@@ -127,10 +136,10 @@ async function bodyText(page) {
     /* 1) Accueil : catégorie non acceptée */
     const c1 = await openContext(browser, { category: null });
     const h1 = await visit(c1, '#/espace');
-    const blue1 = h1.page.locator('a.btn-blue[href="#/espace/presentation"]');
+    const blue1 = h1.page.locator('a.btn-blue[href="#/espace/projets"]');
     /* Le bouton vert de la carte « Étape 1 » (et non le lien « Ma catégorie » des accès rapides) */
     const green1 = h1.page.locator('a.btn-primary:has-text("Ouvrir « Ma catégorie »")');
-    check('accueil (catégorie non acceptée) : bouton bleu « Présenter mon projet » présent', (await blue1.count()) === 1);
+    check('accueil (catégorie non acceptée) : bouton bleu « Mes projets et besoins » présent', (await blue1.count()) === 1);
     check('accueil : bouton bleu affiché sous le bouton vert « Ouvrir Ma catégorie »',
       (await blue1.count()) === 1 && (await green1.count()) === 1 &&
       (await blue1.boundingBox()).y > (await green1.boundingBox()).y);
@@ -140,12 +149,13 @@ async function bodyText(page) {
     /* 2) Accueil : catégorie acceptée (la carte « Étape 1 » disparaît) */
     const c2 = await openContext(browser, { category: 'ba' });
     const h2 = await visit(c2, '#/espace');
-    check('accueil (catégorie acceptée) : carte « Votre présentation » avec le bouton bleu',
-      (await h2.page.locator('a.btn-blue[href="#/espace/presentation"]').count()) === 1 && h2.text.indexOf('Votre présentation') !== -1);
+    check('accueil (catégorie acceptée) : carte « Vos projets et leurs présentations » avec le bouton bleu',
+      (await h2.page.locator('a.btn-blue[href="#/espace/projets"]').count()) === 1 && h2.text.indexOf('Vos projets et leurs présentations') !== -1);
 
-    /* 3) Page : rubriques, exemples, photos */
+    /* 3) Présentation du projet : rubriques, exemples, photos */
     const c3 = await openContext(browser, { category: 'ba' });
-    const p3 = await visit(c3, '#/espace/presentation');
+    const p3 = await visit(c3, '#/espace/presentation/' + PROJECT_ID);
+    check('présentation : le titre affiche le nom du projet', p3.text.indexOf('Présentation : Kiosque solaire') !== -1);
     const titlesOk = SECTIONS.every((label, i) => p3.text.indexOf((i + 1) + '. ' + label) !== -1);
     check('page : les 11 rubriques sont affichées dans l’ordre', titlesOk);
     check('page : un exemple (fictif) sous chaque rubrique', (await p3.page.locator('#f-pres .example').count()) === 11);
@@ -173,6 +183,7 @@ async function bodyText(page) {
     check('brouillon : la fiche est envoyée à la base', writes.length >= 1, writes.map((w) => w.method).join(','));
     const withText = writes.filter((w) => w.body.indexOf('Kiosque test') !== -1 && w.body.indexOf('Problème de recharge') !== -1);
     check('brouillon : les réponses sont dans la fiche', withText.length >= 1);
+    check('brouillon : la fiche est rattachée au projet', withText.length >= 1 && withText[withText.length - 1].body.indexOf(PROJECT_ID) !== -1);
     const dernier = withText.length ? withText[withText.length - 1].body : '';
     check('brouillon : statut « brouillon » envoyé', dernier.indexOf('"statut":"brouillon"') !== -1);
     check('brouillon : la photo est rangée dans le dossier du bénéficiaire', dernier.indexOf('"photos":["' + USER_ID + '/photo-') !== -1);
@@ -197,13 +208,20 @@ async function bodyText(page) {
     check('publier complet : les rubriques sont envoyées', pub.length >= 1 && pub[pub.length - 1].body.indexOf('quarante kiosques') !== -1);
 
     /* 8) Nouvelle visite : les réponses, la photo et la bannière « Publiée » sont réaffichées */
-    const p8 = await visit(c3, '#/espace/presentation');
+    const p8 = await visit(c3, '#/espace/presentation/' + PROJECT_ID);
     const titreValue = await p8.page.locator('#f-pres input[name="titre"]').inputValue().catch(() => '');
     check('nouvelle visite : le titre enregistré est réaffiché', titreValue === 'Kiosque test', titreValue);
     check('nouvelle visite : la photo enregistrée est réaffichée', (await p8.page.locator('#pres-photo-0 img').count()) >= 1);
     check('nouvelle visite : bannière « Publiée le » affichée', p8.text.indexOf('Publiée le') !== -1);
     check('nouvelle visite : aucune erreur JavaScript', p8.errors.length === 0, p8.errors.join(' | '));
     check('nouvelle visite : aucun « undefined », « null » ou « NaN »', !BAD.test(p8.text));
+
+    /* 9) Liste des projets : le projet affiche sa présentation et un lien « Modifier » */
+    const p9 = await visit(c3, '#/espace/projets');
+    const lien9 = p9.page.locator('a[href="#/espace/presentation/' + PROJECT_ID + '"]');
+    check('liste des projets : le lien vers la présentation du projet est présent', (await lien9.count()) === 1);
+    check('liste des projets : l’état « Publiée, à vérifier » est affiché', p9.text.indexOf('Publiée, à vérifier') !== -1);
+    check('liste des projets : aucune erreur JavaScript', p9.errors.length === 0, p9.errors.join(' | '));
   } catch (e) {
     failures++;
     console.log('FAIL exception : ' + (e && e.message ? e.message : e));

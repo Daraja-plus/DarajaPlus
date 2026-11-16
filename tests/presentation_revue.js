@@ -18,6 +18,7 @@ const NOW = '2026-11-13T09:00:00Z';
 const ADMIN_ID = '66666666-6666-4666-8666-666666666666';
 const BEN_ID = '22222222-2222-4222-8222-222222222222';
 const PARTNER_ID = '55555555-5555-4555-8555-555555555555';
+const PROJET_ID = 'p-1';
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,PUT,DELETE,OPTIONS' };
 const BAD = /\b(undefined|null|NaN)\b/;
 
@@ -79,11 +80,12 @@ async function openContext(browser, role, opts) {
     if (p === '/rest/v1/profiles') return reply(filtrer(PROFILES, url.searchParams));
     if (p === '/rest/v1/partners') return reply([{ id: PARTNER_ID, profile_id: PARTNER_ID, legal_name: 'Banque Test', category: 'institution_financiere', status: 'active', created_at: NOW }]);
     if (p === '/rest/v1/presentations' && m === 'GET') {
-      return reply([{ user_id: BEN_ID, statut: 'publiee', content: CONTENU, photos: [], publiee_at: NOW, visible_at: null, updated_at: NOW, created_at: NOW }]);
+      return reply([{ project_id: PROJET_ID, user_id: BEN_ID, statut: 'publiee', content: CONTENU, photos: [], publiee_at: NOW, visible_at: null, updated_at: NOW, created_at: NOW }]);
     }
+    if (p === '/rest/v1/projects') return reply([{ id: PROJET_ID, title: 'Achat de matériel', beneficiary_id: 'b-1' }]);
     if (p === '/rest/v1/rpc/admin_set_presentation_visibility') return reply('visible');
     if (p === '/rest/v1/rpc/partner_available_projects') {
-      return reply([{ project_id: 'p-1', reference: 'p-1', title: 'Achat de matériel', sector: 'Commerce', description: 'Description du projet',
+      return reply([{ project_id: PROJET_ID, reference: PROJET_ID, title: 'Achat de matériel', sector: 'Commerce', description: 'Description du projet',
         use_of_funds: 'Stock', amount: 1500, currency: 'USD', due_date: '2027-03-01', status: 'ready', created_at: NOW,
         beneficiary_identifiant: 'AH1A1Bb1', category: 'bb', zone: 'Zone 1', quartier: 'Quartier 1', rue: 'R2',
         establishment_name: 'Kiosque', establishment_sector: 'Commerce',
@@ -132,6 +134,7 @@ async function bodyText(page) {
     check('admin : lien « Présentations » dans le menu', (await va.page.locator('a[href="#/admin/presentations"]').count()) >= 1);
     check('admin : liste avec l’identifiant du bénéficiaire et le statut « À vérifier »',
       va.text.indexOf('AH1A1Bb1') !== -1 && va.text.indexOf('À vérifier') !== -1);
+    check('admin : chaque ligne indique le projet concerné', va.text.indexOf('Achat de matériel') !== -1);
     check('admin : aucune erreur JavaScript à l’ouverture de la liste', va.errors.length === 0, va.errors.join(' | '));
 
     await va.page.locator('[data-revoir]').first().click();
@@ -140,6 +143,7 @@ async function bodyText(page) {
     const fiche = await va.page.locator('.modal').first().innerText().catch(() => '');
     check('admin : le contenu est lisible (titre et « Vision et contact »)',
       fiche.indexOf('Kiosque test') !== -1 && fiche.indexOf('Vision et contact') !== -1);
+    check('admin : la fiche porte le nom du projet', fiche.indexOf('Achat de matériel') !== -1);
 
     await va.page.locator('.modal [data-set="visible"]').click();
     const demande = await until(async () => (await bodyText(va.page)).indexOf('Rendre cette présentation visible') !== -1, 5000);
@@ -151,7 +155,7 @@ async function bodyText(page) {
     await until(async () => ca.__log.some((e) => e.path === '/rest/v1/rpc/admin_set_presentation_visibility'), 5000);
     const appels = ca.__log.filter((e) => e.path === '/rest/v1/rpc/admin_set_presentation_visibility');
     check('admin : visibilité envoyée à la base une seule fois',
-      appels.length === 1 && appels[0].body.indexOf('"p_visible":true') !== -1 && appels[0].body.indexOf('"p_user":"' + BEN_ID + '"') !== -1,
+      appels.length === 1 && appels[0].body.indexOf('"p_visible":true') !== -1 && appels[0].body.indexOf('"p_project":"' + PROJET_ID + '"') !== -1,
       appels.map((a) => a.body).join(' | '));
     const confirme = await until(async () => (await bodyText(va.page)).indexOf('Présentation visible des partenaires') !== -1, 5000);
     check('admin : confirmation affichée après la visibilité', confirme);
@@ -178,7 +182,7 @@ async function bodyText(page) {
         check('partenaire : la rubrique « Vision et contact » n’est jamais montrée',
           texte.indexOf('Vision et contact') === -1 && texte.indexOf('quarante kiosques') === -1);
         check('partenaire : seul le projet choisi est demandé',
-          cp.__log.some((e) => e.path === '/rest/v1/rpc/partner_presentation' && e.body.indexOf('"p_project":"p-1"') !== -1));
+          cp.__log.some((e) => e.path === '/rest/v1/rpc/partner_presentation' && e.body.indexOf('"p_project":"' + PROJET_ID + '"') !== -1));
       } else {
         check('partenaire : aucun bouton si la fiche n’est pas visible', (await bouton.count()) === 0);
       }

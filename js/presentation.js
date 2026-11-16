@@ -1,4 +1,4 @@
-/* DarajaPlus — « Présenter mon projet » (espace bénéficiaire).
+/* DarajaPlus — « Présenter mon projet » (espace bénéficiaire) : une fiche par projet, rédigée depuis « Mes projets et besoins ».
    Une fiche rédigée rubrique par rubrique, en quelques lignes, avec 1 à 4 photos du produit ou des réalisations.
    Chaque rubrique a une aide et un exemple fictif.
    Trois statuts : « brouillon » (seul le bénéficiaire voit la fiche), « publiée » (l'administrateur la vérifie),
@@ -40,9 +40,15 @@
       example: 'Dans trois ans : quarante kiosques dans deux villes.' }
   ];
 
-  /* Ma fiche de présentation (une seule par bénéficiaire). */
-  async function loadRow() {
-    var rows = await DP.api.get('presentations', { select: '*', user_id: 'eq.' + DP.api.uid });
+  /* La fiche de présentation d'un projet (une par projet). */
+  async function loadRow(projectId) {
+    var rows = await DP.api.get('presentations', { select: '*', project_id: 'eq.' + projectId });
+    return rows[0] || null;
+  }
+
+  /* Le projet du bénéficiaire connecté : la base ne renvoie que ses propres projets. */
+  async function loadProjet(projectId) {
+    var rows = await DP.api.get('projects', { select: 'id,title,status', id: 'eq.' + projectId });
     return rows[0] || null;
   }
 
@@ -88,15 +94,21 @@
       'Publiez-la quand elle est complète : l’administrateur la vérifiera avant toute visibilité auprès des partenaires.');
   }
 
-  async function renderPresentation(el) {
-    var row = await loadRow();
+  async function renderPresentation(el, ctx) {
+    var projectId = ctx.params.id;
+    var projet = await loadProjet(projectId);
+    if (!projet) {
+      el.innerHTML = ui.header('Présentation du projet', '') + ui.card(null, ui.empty('Ce projet n’existe pas, ou il ne vous appartient pas.'));
+      return;
+    }
+    var row = await loadRow(projectId);
     var content = (row && row.content) || {};
     var photos = (row && row.photos) || [];
     var urls = await Promise.all(photos.map(function (p) {
       return DP.api.signedUrlFor('visuels', p, 3600).catch(function () { return ''; });
     }));
 
-    el.innerHTML = ui.header('Présenter mon projet', 'Rédigez votre projet rubrique par rubrique, en quelques lignes : clair, concis et précis.') +
+    el.innerHTML = ui.header('Présentation : ' + projet.title, 'Rédigez ce projet rubrique par rubrique, en quelques lignes : clair, concis et précis. Chaque projet a sa propre présentation.') +
       statusAlert(row) +
       '<form class="form" id="f-pres" data-reset="false" novalidate>' +
         '<input type="hidden" name="cible" value="brouillon">' +
@@ -152,9 +164,9 @@
       }
 
       var payload = { content: newContent, photos: kept, statut: publier ? 'publiee' : 'brouillon', updated_at: new Date().toISOString() };
-      var updated = await DP.api.update('presentations', { user_id: 'eq.' + DP.api.uid }, payload);
+      var updated = await DP.api.update('presentations', { project_id: 'eq.' + projectId }, payload);
       if (!updated || !updated.length) {
-        await DP.api.insert('presentations', Object.assign({ user_id: DP.api.uid }, payload));
+        await DP.api.insert('presentations', Object.assign({ user_id: DP.api.uid, project_id: projectId }, payload));
       }
       /* Anciennes photos remplacées : supprimées du stockage (uniquement celles du dossier du bénéficiaire). */
       var old = replaced.filter(function (p) { return p.indexOf(DP.api.uid + '/') === 0; });
@@ -192,35 +204,40 @@
 
   /* ---------- Administrateur : vérifier et rendre visible ---------- */
   async function renderRevue(el) {
-    var rows = await DP.api.get('presentations', { select: '*', order: 'updated_at.desc', limit: 300 });
+    /* Les présentations sans projet (écrites avant la fusion) ne peuvent pas être vérifiées ici : elles sont exclues. */
+    var rows = (await DP.api.get('presentations', { select: '*', order: 'updated_at.desc', limit: 300 }))
+      .filter(function (r) { return r.project_id; });
     var people = await DP.api.get('profiles', { select: 'id,identifiant,prenom,nom', role: 'eq.beneficiary' });
+    var projets = await DP.api.get('projects', { select: 'id,title', limit: 500 });
     var byUser = {};
     people.forEach(function (p) { byUser[p.id] = p; });
+    var byProjet = {};
+    projets.forEach(function (pj) { byProjet[pj.id] = pj; });
 
     el.innerHTML = ui.header('Présentations des projets',
-        'Présentations publiées par les bénéficiaires. Vérifiez le contenu avant de la rendre visible : la rubrique « Vision et contact » peut contenir des coordonnées.') +
+        'Une présentation par projet, publiée par le bénéficiaire. Vérifiez le contenu avant de la rendre visible : la rubrique « Vision et contact » peut contenir des coordonnées.') +
       ui.card(null, ui.table([
         { label: 'Bénéficiaire', render: function (r) {
           var p = byUser[r.user_id] || {};
           return '<strong>' + esc(p.identifiant || '—') + '</strong><div class="small">' + esc([p.prenom, p.nom].filter(Boolean).join(' ')) + '</div>';
         } },
-        { label: 'Titre', render: function (r) { return esc((r.content && r.content.titre) || 'Sans titre'); } },
+        { label: 'Projet', render: function (r) { var pj = byProjet[r.project_id]; return esc(pj ? pj.title : 'Projet introuvable'); } },
         { label: 'Statut', render: function (r) { return STATUT_ADMIN[r.statut] || ''; } },
         { label: 'Dernière modification', render: function (r) { return ui.dateTime(r.updated_at); } },
         { label: 'Action', cls: 'actions', render: function (r) {
-          return '<button class="btn btn-sm btn-outline" type="button" data-revoir="' + esc(r.user_id) + '">Vérifier</button>';
+          return '<button class="btn btn-sm btn-outline" type="button" data-revoir="' + esc(r.project_id) + '">Vérifier</button>';
         } }
       ], rows, 'Aucune présentation publiée pour le moment. Les brouillons ne sont pas visibles de l’administrateur.'));
 
     el.querySelectorAll('[data-revoir]').forEach(function (b) {
       b.addEventListener('click', function () {
-        var row = rows.find(function (r) { return r.user_id === b.dataset.revoir; });
-        if (row) ouvrirRevue(row, byUser[row.user_id] || {});
+        var row = rows.find(function (r) { return r.project_id === b.dataset.revoir; });
+        if (row) ouvrirRevue(row, byUser[row.user_id] || {}, (byProjet[row.project_id] || {}).title || '');
       });
     });
   }
 
-  async function ouvrirRevue(row, p) {
+  async function ouvrirRevue(row, p, titreProjet) {
     var urls = await Promise.all((row.photos || []).map(function (ph) {
       return DP.api.signedUrlFor('visuels', ph, 3600).catch(function () { return ''; });
     }));
@@ -228,7 +245,7 @@
     var actions = visible
       ? '<button type="button" class="btn btn-outline" data-set="retirer">Retirer la visibilité</button>'
       : '<button type="button" class="btn btn-primary" data-set="visible">Rendre visible aux partenaires</button>';
-    var m = ui.modal('Présentation de ' + (p.identifiant || 'ce bénéficiaire'),
+    var m = ui.modal('Présentation de ' + (p.identifiant || 'ce bénéficiaire') + (titreProjet ? ' — ' + titreProjet : ''),
       '<p class="small muted">Statut : ' + (STATUT_ADMIN[row.statut] || '') + ' · Dernière modification : ' + ui.dateTime(row.updated_at) + '</p>' +
         readHtml(row.content || {}, urls),
       actions + ' <button type="button" class="btn btn-ghost" data-close>Fermer</button>');
@@ -240,7 +257,7 @@
         if (!ok) return;
       }
       try {
-        await DP.api.rpc('admin_set_presentation_visibility', { p_user: row.user_id, p_visible: rendreVisible });
+        await DP.api.rpc('admin_set_presentation_visibility', { p_project: row.project_id, p_visible: rendreVisible });
         m.close();
         ui.toast(rendreVisible ? 'Présentation visible des partenaires.' : 'Visibilité retirée.', 'ok');
         DP.navigate();
@@ -269,7 +286,9 @@
 
   /* ---------- Routes ---------- */
   DP.register([
-    { path: '/espace/presentation', roles: ROLE, title: 'Présenter mon projet', render: renderPresentation },
+    { path: '/espace/presentation/:id', roles: ROLE, title: 'Présenter mon projet', render: renderPresentation },
+    /* Ancien lien (une fiche par bénéficiaire) : renvoie à la liste des projets, où chaque projet a sa présentation. */
+    { path: '/espace/presentation', roles: ROLE, title: 'Présenter mon projet', render: function () { location.hash = '#/espace/projets'; } },
     { path: '/admin/presentations', roles: ['admin'], title: 'Présentations', render: renderRevue }
   ]);
 })();
