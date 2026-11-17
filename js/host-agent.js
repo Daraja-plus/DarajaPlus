@@ -421,11 +421,30 @@
     var st = (ctx.query && ctx.query.get('statut')) || '';
     var params = { select: '*', order: 'created_at.desc', limit: 500 };
     if (st) params.status = 'eq.' + st;
-    var rows = await DP.api.get('projects', params);
+    var toutes = await DP.api.get('projects', params);
+    /* Ses propres projets (sans fiche bénéficiaire) : l'agent les rédige et les publie comme un bénéficiaire.
+       Il ne change pas leur statut : c'est l'équipe qui le fait. */
+    var mesProjets = toutes.filter(function (p) { return !p.beneficiary_id; });
+    var rows = toutes.filter(function (p) { return p.beneficiary_id; });
     var bens = byId(await DP.api.get('beneficiaries', { select: 'id,code,prenom,nom', id: inq(rows.map(function (p) { return p.beneficiary_id; })) || 'is.null' }));
     var map = byId(rows);
-    el.innerHTML = ui.header('Dossiers et besoins', 'Dossiers de vos bénéficiaires. Marquez « Prêt à présenter » quand le dossier est complet et vérifié.') +
-      ui.card(null, filterBar('#/agent/projets', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(STATUS_PROJ) }]) +
+    var presParProjet = {};
+    (await DP.api.get('presentations', { select: 'project_id,statut', user_id: 'eq.' + DP.api.uid })).forEach(function (pr) { if (pr.project_id) presParProjet[pr.project_id] = pr; });
+    var PRES_LIBELLE = { brouillon: 'Brouillon', publiee: 'Publiée, à vérifier', visible: 'Visible des partenaires' };
+    el.innerHTML = ui.header('Projets et besoins', 'Vos propres projets, et les dossiers de vos bénéficiaires. Marquez « Prêt à présenter » quand le dossier d’un bénéficiaire est complet et vérifié.') +
+      ui.card('Mes projets',
+        '<div class="form-actions"><a class="btn btn-primary" href="#/espace/presentation/nouveau">Présenter mon projet</a></div>' +
+        ui.table([
+          { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
+          { label: 'Montant', cls: 'num', render: function (p) { return ui.money(p.amount, p.currency); } },
+          { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
+          { label: 'Présentation', render: function (p) {
+            var pr = presParProjet[p.id];
+            var etat = pr ? '<span class="small">' + esc(PRES_LIBELLE[pr.statut] || pr.statut) + '</span>' : '<span class="small muted">Pas encore rédigée</span>';
+            return etat + '<div><a class="btn btn-sm btn-blue" href="#/espace/presentation/' + esc(p.id) + '">' + (pr ? 'Modifier' : 'Rédiger') + '</a></div>';
+          } }
+        ], mesProjets, 'Vous n’avez pas encore de projet. Cliquez sur « Présenter mon projet ».')) +
+      ui.card('Dossiers de vos bénéficiaires', filterBar('#/agent/projets', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(STATUS_PROJ) }]) +
         ui.table([
           { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
           { label: 'Bénéficiaire', render: function (p) { return '<a href="#/agent/beneficiaires/' + esc(p.beneficiary_id) + '">' + esc(bLabel(bens[p.beneficiary_id])) + '</a>'; } },

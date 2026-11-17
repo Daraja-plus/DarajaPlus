@@ -685,7 +685,7 @@
       ui.card(null, filterBar('#/admin/projets', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(STATUS_PROJ) }]) +
         ui.table([
           { label: 'Projet', render: function (p) { return '<strong>' + esc(p.title) + '</strong><div class="small muted">' + esc(p.sector || '') + '</div>'; } },
-          { label: 'Bénéficiaire', render: function (p) { var b = bens[p.beneficiary_id]; return esc(b ? bcode(b) + ' — ' + bname(b) : '—'); } },
+          { label: 'Porteur', render: function (p) { if (!p.beneficiary_id) return esc('Projet d’un agent'); var b = bens[p.beneficiary_id]; return esc(b ? bcode(b) + ' — ' + bname(b) : '—'); } },
           { label: 'Montant', cls: 'num', render: function (p) { return ui.money(p.amount, p.currency); } },
           { label: 'Statut', render: function (p) { return ui.badge(p.status); } },
           { label: 'Créé le', render: function (p) { return ui.date(p.created_at); } },

@@ -3,7 +3,7 @@
       ouverture de la fiche (11 rubriques) ; « Rendre visible aux partenaires » après confirmation ;
       envoi de la visibilité à la base ;
    B) partenaire : bouton « Voir la présentation » seulement si la fiche est visible ; fiche ouverte avec 10 rubriques
-      (sans « Vision et contact », même si la réponse la contenait) ; zone, quartier et rue affichés ;
+      (sans la rubrique « Vision », même si la réponse la contenait) ; zone, quartier et rue affichés ;
    C) aucune erreur JavaScript et aucun « undefined », « null » ou « NaN ».
    Usage :
      1) servir le dossier :  python3 -m http.server 8765   (depuis le dossier DarajaPlus)
@@ -141,14 +141,14 @@ async function bodyText(page) {
     const ouverte = await until(async () => (await va.page.locator('.modal .h-sub').count()) === 11, 8000);
     check('admin : la fiche s’ouvre avec les 11 rubriques', ouverte);
     const fiche = await va.page.locator('.modal').first().innerText().catch(() => '');
-    check('admin : le contenu est lisible (titre et « Vision et contact »)',
-      fiche.indexOf('Kiosque test') !== -1 && fiche.indexOf('Vision et contact') !== -1);
+    check('admin : le contenu est lisible (titre et rubrique « Vision »)',
+      fiche.indexOf('Kiosque test') !== -1 && fiche.indexOf('Vision') !== -1);
     check('admin : la fiche porte le nom du projet', fiche.indexOf('Achat de matériel') !== -1);
 
     await va.page.locator('.modal [data-set="visible"]').click();
     const demande = await until(async () => (await bodyText(va.page)).indexOf('Rendre cette présentation visible') !== -1, 5000);
-    check('admin : demande de confirmation avec rappel sur « Vision et contact »',
-      demande && (await bodyText(va.page)).indexOf('Vision et contact') !== -1);
+    check('admin : demande de confirmation avant visibilité',
+      demande && (await bodyText(va.page)).indexOf('Vérifiez tout le contenu') !== -1);
     await va.page.locator('.modal [data-ok]').click();
 
     /* L'appel part après la fermeture de la confirmation : on attend qu'il soit enregistré. */
@@ -179,8 +179,8 @@ async function bodyText(page) {
         check('partenaire : la fiche s’ouvre avec les 10 rubriques', ouvert);
         const texte = await vp.page.locator('.modal').first().innerText().catch(() => '');
         check('partenaire : le texte de la fiche est lisible', texte.indexOf('Problème de recharge') !== -1 && texte.indexOf('3 000 USD') !== -1);
-        check('partenaire : la rubrique « Vision et contact » n’est jamais montrée',
-          texte.indexOf('Vision et contact') === -1 && texte.indexOf('quarante kiosques') === -1);
+        check('partenaire : la rubrique « Vision » n’est pas montrée (décision en attente)',
+          texte.indexOf('Vision') === -1 && texte.indexOf('quarante kiosques') === -1);
         check('partenaire : seul le projet choisi est demandé',
           cp.__log.some((e) => e.path === '/rest/v1/rpc/partner_presentation' && e.body.indexOf('"p_project":"' + PROJET_ID + '"') !== -1));
       } else {

@@ -1,4 +1,4 @@
-/* DarajaPlus — « Présenter mon projet » (espace bénéficiaire) : une fiche par projet. La fiche contient le projet et son besoin : « Présenter mon projet » crée le projet et sa fiche, et la même fiche permet ensuite de le modifier (il n'existe pas d'autre formulaire de création).
+/* DarajaPlus — « Présenter mon projet » (espaces bénéficiaire et agent) : une fiche par projet. La fiche contient le projet et son besoin : « Présenter mon projet » crée le projet et sa fiche, et la même fiche permet ensuite de le modifier (il n'existe pas d'autre formulaire de création).
    Une fiche rédigée rubrique par rubrique, en quelques lignes, avec 1 à 4 photos du produit ou des réalisations.
    Chaque rubrique a une aide et un exemple fictif.
    Trois statuts : « brouillon » (seul le bénéficiaire voit la fiche), « publiée » (l'administrateur la vérifie),
@@ -10,9 +10,10 @@
   var DP = window.DP;
   var esc = DP.ui.esc;
   var ui = DP.ui;
-  var ROLE = ['beneficiary'];
+  /* Un agent peut aussi présenter ses propres projets (sans fiche bénéficiaire). */
+  var ROLE = ['beneficiary', 'agent'];
   var TITLE_MAX = 120;
-  var TEXT_MAX = 600;
+  var TEXT_MAX = 300;
   var PHOTO_SLOTS = 4;
 
   var SECTIONS = [
@@ -36,7 +37,7 @@
       example: 'Nous sommes trois : moi (gestion), un technicien (installation) et une commerciale (ventes).' },
     { key: 'demande', label: 'Demande', help: 'Le montant recherché, l’usage prévu et les jalons à atteindre.',
       example: '3 000 USD pour acheter dix kiosques. Jalons : dix kiosques installés en quatre mois, cinquante clients réguliers en six mois.' },
-    { key: 'vision', label: 'Vision et contact', help: 'Où en sera le projet dans 1 à 3 ans si vous obtenez le financement. Vos coordonnées (téléphone, e-mail, adresse) ne sont pas montrées aux partenaires avant la conclusion du marché.',
+    { key: 'vision', label: 'Vision', help: 'Où en sera le projet dans 1 à 3 ans si vous obtenez le financement.',
       example: 'Dans trois ans : quarante kiosques dans deux villes.' }
   ];
 
@@ -63,6 +64,16 @@
     return DP.api.get('establishments', { select: 'id,name', created_by: 'eq.' + DP.api.uid, order: 'name.asc' });
   }
 
+  /* Secteurs d'activité proposés. Une valeur déjà enregistrée et absente de cette liste reste proposée. */
+  var SECTEURS = ['Agriculture', 'Élevage et pêche', 'Commerce', 'Artisanat', 'Transformation alimentaire', 'Services',
+    'Construction', 'Industrie', 'Transport et logistique', 'Technologies et numérique', 'Santé', 'Éducation', 'Énergie', 'Autre'];
+
+  function secteurOptions(actuel) {
+    var liste = SECTEURS.slice();
+    if (actuel && liste.indexOf(actuel) === -1) liste.unshift(actuel);
+    return liste.map(function (s) { return [s, s]; });
+  }
+
   /* « Le besoin » : toutes les informations du projet. La même carte sert à créer un projet et à le modifier. */
   function besoinCard(projet, etablissements) {
     var p = projet || {};
@@ -73,7 +84,8 @@
       ui.field({ name: 'currency', label: 'Devise', type: 'select', options: [['USD', 'USD'], ['FC', 'FC']], value: p.currency || 'USD' }) +
       '</div>' +
       '<div class="field-row">' +
-      ui.field({ name: 'sector', label: 'Secteur d’activité', value: p.sector, placeholder: 'ex. commerce, agriculture', dataType: 'nullable' }) +
+      ui.field({ name: 'sector', label: 'Secteur d’activité', type: 'select', options: secteurOptions(p.sector), value: p.sector || '',
+        placeholder: 'Choisissez un secteur', dataType: 'nullable' }) +
       ui.field({ name: 'due_date', label: 'Échéance souhaitée', type: 'date', value: p.due_date, dataType: 'nullable' }) +
       '</div>' +
       ui.field({ name: 'establishment_id', label: 'Entreprise concernée', type: 'select',
@@ -84,9 +96,15 @@
       ui.field({ name: 'use_of_funds', label: 'À quoi serviront les fonds ?', type: 'textarea', rows: 3, value: p.use_of_funds, full: true, dataType: 'nullable' }));
   }
 
+  /* Où retrouver la liste des projets : l'espace bénéficiaire, ou l'espace agent pour ses propres projets. */
+  function listeProjets() {
+    var agent = DP.app.profile && DP.app.profile.role === 'agent';
+    return { href: agent ? '#/agent/projets' : '#/espace/projets', libelle: agent ? '« Projets & besoins »' : '« Mes projets et besoins »' };
+  }
+
   function alerteNouveau(row) {
     return ui.alert('info', '<strong>Nouveau projet.</strong> Indiquez votre besoin (montant et devise au minimum), puis enregistrez. ' +
-      (row ? 'Votre présentation déjà rédigée sera reprise pour ce projet.' : 'Le projet apparaît ensuite dans « Mes projets et besoins ».'));
+      (row ? 'Votre présentation déjà rédigée sera reprise pour ce projet.' : 'Le projet apparaît ensuite dans ' + listeProjets().libelle + '.'));
   }
 
   /* Contrôles communs aux deux écrans : longueur des rubriques, puis rubriques complètes si la fiche est publiée. */
@@ -139,7 +157,7 @@
         hint: 'Une ligne, ' + TITLE_MAX + ' caractères maximum.' });
     }
     return ui.field({ name: s.key, label: 'Votre réponse', type: 'textarea', rows: 4, value: value,
-      hint: 'Quelques lignes, ' + TEXT_MAX + ' caractères maximum.' });
+      hint: 'Clair, concis et précis : ' + TEXT_MAX + ' caractères maximum.' });
   }
 
   function photosHtml(urls) {
@@ -200,7 +218,7 @@
 
     var titre = nouveau ? 'Présenter mon projet' : 'Présentation : ' + projet.title;
     var intro = nouveau
-      ? 'Rédigez votre projet rubrique par rubrique et indiquez votre besoin. Le projet apparaît ensuite dans « Mes projets et besoins ».'
+      ? 'Rédigez votre projet rubrique par rubrique, de façon claire, concise et précise. Le projet apparaît ensuite dans ' + listeProjets().libelle + '.'
       : 'Rédigez ce projet rubrique par rubrique, en quelques lignes : clair, concis et précis. Le besoin et les rubriques se modifient ici.';
     el.innerHTML = ui.header(titre, intro) +
       (nouveau ? alerteNouveau(row) : statusAlert(row)) +
@@ -268,7 +286,7 @@
   }
 
   /* ---------- Lecture d'une présentation (administrateur et partenaire) ---------- */
-  /* Pour un partenaire, la rubrique « vision » (vision et contact) n'est jamais montrée. */
+  /* Pour un partenaire, la rubrique « vision » n'est pas montrée pour l'instant (décision en attente). */
   function readHtml(content, urls, pourPartenaire) {
     var rubriques = SECTIONS.filter(function (s) { return !(pourPartenaire && s.key === 'vision'); });
     return rubriques.map(function (s, i) {
@@ -296,7 +314,7 @@
     /* Les présentations sans projet (écrites avant la fusion) ne peuvent pas être vérifiées ici : elles sont exclues. */
     var rows = (await DP.api.get('presentations', { select: '*', order: 'updated_at.desc', limit: 300 }))
       .filter(function (r) { return r.project_id; });
-    var people = await DP.api.get('profiles', { select: 'id,identifiant,prenom,nom', role: 'eq.beneficiary' });
+    var people = await DP.api.get('profiles', { select: 'id,identifiant,prenom,nom,role', role: 'in.(beneficiary,agent)' });
     var projets = await DP.api.get('projects', { select: 'id,title', limit: 500 });
     var byUser = {};
     people.forEach(function (p) { byUser[p.id] = p; });
@@ -304,11 +322,12 @@
     projets.forEach(function (pj) { byProjet[pj.id] = pj; });
 
     el.innerHTML = ui.header('Présentations des projets',
-        'Une présentation par projet, publiée par le bénéficiaire. Vérifiez le contenu avant de la rendre visible : la rubrique « Vision et contact » peut contenir des coordonnées.') +
+        'Une présentation par projet, publiée par le bénéficiaire ou par l’agent porteur du projet. Vérifiez le contenu avant de la rendre visible.') +
       ui.card(null, ui.table([
-        { label: 'Bénéficiaire', render: function (r) {
+        { label: 'Porteur', render: function (r) {
           var p = byUser[r.user_id] || {};
-          return '<strong>' + esc(p.identifiant || '—') + '</strong><div class="small">' + esc([p.prenom, p.nom].filter(Boolean).join(' ')) + '</div>';
+          return '<strong>' + esc(p.identifiant || '—') + '</strong><div class="small">' + esc([p.prenom, p.nom].filter(Boolean).join(' ')) + '</div>' +
+            '<div class="small muted">' + (p.role === 'agent' ? 'Agent' : 'Bénéficiaire') + '</div>';
         } },
         { label: 'Projet', render: function (r) { var pj = byProjet[r.project_id]; return esc(pj ? pj.title : 'Projet introuvable'); } },
         { label: 'Statut', render: function (r) { return STATUT_ADMIN[r.statut] || ''; } },
@@ -334,7 +353,7 @@
     var actions = visible
       ? '<button type="button" class="btn btn-outline" data-set="retirer">Retirer la visibilité</button>'
       : '<button type="button" class="btn btn-primary" data-set="visible">Rendre visible aux partenaires</button>';
-    var m = ui.modal('Présentation de ' + (p.identifiant || 'ce bénéficiaire') + (titreProjet ? ' — ' + titreProjet : ''),
+    var m = ui.modal('Présentation de ' + (p.identifiant || 'ce porteur de projet') + (titreProjet ? ' — ' + titreProjet : ''),
       '<p class="small muted">Statut : ' + (STATUT_ADMIN[row.statut] || '') + ' · Dernière modification : ' + ui.dateTime(row.updated_at) + '</p>' +
         readHtml(row.content || {}, urls),
       actions + ' <button type="button" class="btn btn-ghost" data-close>Fermer</button>');
@@ -342,7 +361,7 @@
     m.el.querySelector('[data-set]').addEventListener('click', async function (e) {
       var rendreVisible = e.currentTarget.dataset.set === 'visible';
       if (rendreVisible) {
-        var ok = await ui.confirm('Rendre cette présentation visible des partenaires ? Vérifiez tout le contenu, en particulier la rubrique « Vision et contact ».', 'Rendre visible');
+        var ok = await ui.confirm('Rendre cette présentation visible des partenaires ? Vérifiez tout le contenu avant de confirmer.', 'Rendre visible');
         if (!ok) return;
       }
       try {
@@ -367,7 +386,7 @@
       return DP.api.signedUrlFor('visuels', ph, 3600).catch(function () { return ''; });
     }));
     ui.modal('Présentation du projet',
-      '<p class="small muted">Présentation rédigée par le bénéficiaire et vérifiée par l’administrateur de DarajaPlus.</p>' +
+      '<p class="small muted">Présentation rédigée par le porteur du projet (bénéficiaire ou agent) et vérifiée par l’administrateur de DarajaPlus.</p>' +
       readHtml(res.content || {}, urls, true));
   }
 
@@ -377,7 +396,7 @@
   DP.register([
     { path: '/espace/presentation/:id', roles: ROLE, title: 'Présenter mon projet', render: renderPresentation },
     /* Ancien lien (une fiche par bénéficiaire) : renvoie à la liste des projets, où chaque projet a sa présentation. */
-    { path: '/espace/presentation', roles: ROLE, title: 'Présenter mon projet', render: function () { location.hash = '#/espace/projets'; } },
+    { path: '/espace/presentation', roles: ROLE, title: 'Présenter mon projet', render: function () { location.hash = listeProjets().href; } },
     { path: '/admin/presentations', roles: ['admin'], title: 'Présentations', render: renderRevue }
   ]);
 })();

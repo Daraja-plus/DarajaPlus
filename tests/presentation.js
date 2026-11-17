@@ -26,7 +26,7 @@ const PROJECT_ID = '44444444-4444-4444-8444-444444444444';
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };
 const BAD = /\b(undefined|null|NaN)\b/;
 const TINY_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
-const SECTIONS = ['Titre', 'Problème', 'Solution', 'Produit ou service', 'Marché', 'Modèle économique', 'Concurrence', 'Go-to-market', 'Équipe', 'Demande', 'Vision et contact'];
+const SECTIONS = ['Titre', 'Problème', 'Solution', 'Produit ou service', 'Marché', 'Modèle économique', 'Concurrence', 'Go-to-market', 'Équipe', 'Demande', 'Vision'];
 const REPONSES = {
   solution: 'Un kiosque solaire loue des batteries chargées.',
   produit: 'Prototype en bois, testé pendant un mois.',
@@ -179,7 +179,7 @@ async function bodyText(page) {
     check('page : « Le besoin » affiché avec le montant du projet', (await p3.page.locator('#f-pres input[name="amount"]').inputValue()) === '3000');
     check('page : « Le besoin » : tous les champs du projet présents',
       (await p3.page.locator('#f-pres select[name="currency"]').count()) === 1 &&
-      (await p3.page.locator('#f-pres input[name="sector"]').count()) === 1 &&
+      (await p3.page.locator('#f-pres select[name="sector"]').count()) === 1 &&
       (await p3.page.locator('#f-pres input[name="due_date"]').count()) === 1 &&
       (await p3.page.locator('#f-pres select[name="establishment_id"]').count()) === 1 &&
       (await p3.page.locator('#f-pres textarea[name="description"]').count()) === 1 &&

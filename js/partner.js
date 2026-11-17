@@ -254,10 +254,13 @@
         DP.ui.badge(r.status) + '</div>' +
       '<div class="card-body">' +
         '<dl class="kv">' +
-          '<dt>Bénéficiaire</dt><dd><strong>' + esc(r.beneficiary_identifiant || '—') + '</strong> ' + DP.ui.categoryBadge(r.category) + '</dd>' +
+          (r.porteur_role === 'agent'
+            ? '<dt>Agent</dt><dd><strong>' + esc(r.beneficiary_identifiant || '—') + '</strong> <span class="small muted">projet de l’agent</span></dd>'
+            : '<dt>Bénéficiaire</dt><dd><strong>' + esc(r.beneficiary_identifiant || '—') + '</strong> ' + DP.ui.categoryBadge(r.category) + '</dd>') +
           '<dt>Zone</dt><dd>' + esc(r.zone || 'Non précisée') + '</dd>' +
-          '<dt>Quartier</dt><dd>' + esc(r.quartier || 'Non précisé') + '</dd>' +
-          '<dt>Rue</dt><dd>' + esc(r.rue || 'Non encore attribuée') + '</dd>' +
+          (r.porteur_role === 'agent' ? '' :
+            '<dt>Quartier</dt><dd>' + esc(r.quartier || 'Non précisé') + '</dd>' +
+            '<dt>Rue</dt><dd>' + esc(r.rue || 'Non encore attribuée') + '</dd>') +
           '<dt>Montant</dt><dd>' + DP.ui.money(r.amount, r.currency) + '</dd>' +
           '<dt>Secteur</dt><dd>' + esc(r.sector || '—') + '</dd>' +
           '<dt>Échéance</dt><dd>' + DP.ui.date(r.due_date) + '</dd>' +
