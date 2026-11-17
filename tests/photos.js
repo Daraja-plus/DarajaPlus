@@ -239,7 +239,8 @@ function bigJpegBase64(page) {
     check('projets disponibles : identifiants des bénéficiaires affichés', pr.text.indexOf('DP-000001') !== -1 && pr.text.indexOf('DP-000002') !== -1);
     check('projets disponibles : statuts affichés', pr.text.indexOf('Prêt à présenter') !== -1 && pr.text.indexOf('En cours') !== -1);
     check('projets disponibles : photo d’activité et légende', (await countOf(pr.page, '#results .gallery-item img')) === 1 && pr.text.indexOf('Étal du marché') !== -1);
-    check('projets disponibles : sollicitation seulement pour « Prêt à présenter » sans demande', (await countOf(pr.page, '#results [data-ask]')) === 1);
+    check('projets disponibles : aucun bouton de demande pour le partenaire', (await countOf(pr.page, '#results [data-ask]')) === 0);
+    check('projets disponibles : renvoi vers l’Administrateur pour une mise en relation', pr.text.indexOf('Pour une mise en relation') !== -1);
     check('projets disponibles : demande déjà envoyée indiquée', pr.text.indexOf('Demande de mise en relation') !== -1);
     check('projets disponibles : projet en cours sans sollicitation', /en cours d.accompagnement/.test(pr.text));
     await pr.page.locator('#f-filter input[name="sector"]').fill('commerce');

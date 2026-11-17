@@ -710,7 +710,8 @@
     var bens = await beneficiariesFor(Object.keys(projects).map(function (k) { return projects[k].beneficiary_id; }));
     var partners = byId(await DP.api.get('partners', { select: 'id,legal_name,category', id: inq(rows.map(function (c) { return c.partner_id; })) || 'is.null' }));
     var map = byId(rows);
-    el.innerHTML = ui.header('Ponts — mises en relation', 'Étape 1 : vous validez la demande. Ensuite le bénéficiaire donne son consentement, puis le partenaire étudie le dossier. Le partenaire garde la décision finale.') +
+    el.innerHTML = ui.header('Ponts — mises en relation', 'Vous êtes le seul à mettre en relation : vous choisissez le projet et le partenaire. Ensuite le bénéficiaire donne son consentement, puis le partenaire étudie le dossier et garde la décision finale. Les demandes encore en attente de l’ancien circuit se valident dans le tableau.') +
+      '<p><button class="btn btn-primary" type="button" data-nouvelle>Mettre en relation</button></p>' +
       ui.card(null, filterBar('#/admin/ponts', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(Object.keys(DP.labels.status).filter(function (k) {
         return ['requested', 'refused_admin', 'approved_admin', 'consent_given', 'transmitted', 'under_study', 'complement_requested', 'accepted', 'refused', 'closed', 'cancelled'].indexOf(k) !== -1;
       }).map(function (k) { return [k, DP.labels.status[k]]; })) }]) +
@@ -728,6 +729,7 @@
           } }
         ], rows, 'Aucune demande de mise en relation pour le moment.'));
     bindFilters(el);
+    act(el, '[data-nouvelle]', function () { nouvelleMiseEnRelation(); });
     act(el, '[data-approve]', async function (b) {
       if (!(await ui.confirm('Valider cette demande ? Le bénéficiaire sera invité à donner son consentement avant tout partage de pièces.', 'Valider'))) return;
       await DP.api.rpc('admin_review_connection', { p_connection: b.dataset.approve, p_approve: true, p_reason: null });
@@ -739,6 +741,35 @@
         return DP.api.rpc('admin_review_connection', { p_connection: b.dataset.refuse, p_approve: false, p_reason: reason });
       });
     });
+  }
+
+  /* Mise en relation créée par l'administrateur : projet « prêt » avec bénéficiaire, partenaire actif, motif. */
+  async function nouvelleMiseEnRelation() {
+    var r = await Promise.all([
+      DP.api.get('projects', { select: 'id,title,amount,currency', status: 'eq.ready', beneficiary_id: 'not.is.null', order: 'created_at.desc', limit: 500 }),
+      DP.api.get('partners', { select: 'id,legal_name,profile_id', order: 'legal_name.asc', limit: 500 }),
+      DP.api.get('profiles', { select: 'id', role: 'eq.partner', status: 'eq.active', limit: 500 })
+    ]);
+    var projets = Array.isArray(r[0]) ? r[0] : [];
+    var actifs = {};
+    (Array.isArray(r[2]) ? r[2] : []).forEach(function (p) { actifs[p.id] = true; });
+    var partenaires = (Array.isArray(r[1]) ? r[1] : []).filter(function (x) { return actifs[x.profile_id]; });
+    if (!projets.length) { ui.toast('Aucun projet « prêt à présenter » rattaché à un bénéficiaire.', 'bad'); return; }
+    if (!partenaires.length) { ui.toast('Aucun partenaire actif.', 'bad'); return; }
+    var m = ui.modal('Mettre en relation', '<form class="form" id="mer">' +
+      ui.field({ name: 'project_id', label: 'Projet', type: 'select', required: true, placeholder: 'Choisir un projet', dataType: 'nullable',
+        options: projets.map(function (p) { return [p.id, p.title + ' — ' + ui.money(p.amount, p.currency)]; }) }) +
+      ui.field({ name: 'partner_id', label: 'Partenaire', type: 'select', required: true, placeholder: 'Choisir un partenaire', dataType: 'nullable',
+        options: partenaires.map(function (x) { return [x.id, x.legal_name]; }) }) +
+      ui.field({ name: 'motive', label: 'Motif de la mise en relation', type: 'textarea', rows: 3, required: true, full: true,
+        hint: 'Au moins 20 caractères. Visible par le partenaire.' }) +
+      '<div class="form-actions"><button class="btn btn-primary" type="submit">Mettre en relation</button></div></form>');
+    ui.bindForm(m.el.querySelector('#mer'), async function (d) {
+      await DP.api.rpc('admin_mettre_en_relation', { p_project: d.project_id, p_partner: d.partner_id, p_motive: d.motive });
+      m.close();
+      refresh();
+      return 'Mise en relation créée. Le bénéficiaire est invité à donner son consentement.';
+    }, null);
   }
 
   /* ---------- Résultats déclarés ---------- */

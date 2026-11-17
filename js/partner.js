@@ -198,34 +198,6 @@
     }, null);
   }
 
-  /* ---------- Recherche de projets ---------- */
-  function askConnection(projectId, onDone) {
-    var m = DP.ui.modal('Demande de mise en relation',
-      '<form id="f-motive" class="form">' +
-      DP.ui.field({ name: 'motive', label: 'Motif de la demande', type: 'textarea', rows: 5, required: true, hint: 'Expliquez votre intérêt pour ce projet (au moins 20 caractères).' }) +
-      '<p class="legal-note">La demande est examinée par l’Administrateur avant toute transmission de documents. ' +
-      'Vous ne verrez les pièces qu’après consentement du bénéficiaire. ' + esc(NOTICE) + '</p>' +
-      '<div class="form-actions"><button type="button" class="btn btn-outline" data-close>Annuler</button>' +
-      '<button class="btn btn-primary" type="submit">Envoyer la demande</button></div></form>');
-    var form = m.el.querySelector('#f-motive');
-    form.addEventListener('submit', async function (e) {
-      e.preventDefault();
-      var motive = String(DP.ui.formData(form).motive || '').trim();
-      if (motive.length < 20) { DP.ui.toast('Le motif doit contenir au moins 20 caractères.', 'bad'); return; }
-      var btn = form.querySelector('[type=submit]');
-      btn.disabled = true;
-      try {
-        await DP.api.rpc('partner_request_connection', { p_project: projectId, p_motive: motive });
-        m.close();
-        DP.ui.toast('Demande envoyée à l’Administrateur.', 'ok');
-        if (onDone) onDone();
-      } catch (err) {
-        DP.ui.toast(DP.ui.errMsg(err), 'bad');
-        btn.disabled = false;
-      }
-    });
-  }
-
   /* Rubrique « Projets disponibles » : tous les projets validés (prêts, en cours, clôturés), avec leur statut.
      Le partenaire voit l'identifiant, la zone, le quartier et la rue du bénéficiaire, le projet, l'activité et ses photos. Jamais le profil ni ses coordonnées. */
   var CONN_ENDED = ['refused_admin', 'refused', 'closed', 'cancelled'];
@@ -236,7 +208,8 @@
     if (!ended) {
       action = '<p class="small">Demande de mise en relation : ' + DP.ui.badge(r.connection_status) + '</p>';
     } else if (r.status === 'ready') {
-      action = '<button class="btn btn-primary btn-sm" type="button" data-ask="' + esc(r.project_id) + '">Solliciter la mise en relation</button>';
+      action = '<p class="small muted">Pour une mise en relation, écrivez à l’Administrateur.</p>' +
+        '<a class="btn btn-ghost btn-sm" href="#/messages">Écrire à l’Administrateur</a>';
     } else {
       action = '<p class="small muted">Mise en relation non disponible : ce projet est ' +
         (r.status === 'in_progress' ? 'en cours d’accompagnement.' : 'clôturé.') + '</p>';
@@ -303,9 +276,6 @@
         }));
         box.innerHTML = '<p class="small muted">' + rows.length + ' projet(s) validé(s).</p>' +
           (rows.length ? rows.map(projectCard).join('') : DP.ui.empty('Aucun projet validé ne correspond à ces critères pour le moment.'));
-        box.querySelectorAll('[data-ask]').forEach(function (b) {
-          b.addEventListener('click', function () { askConnection(b.dataset.ask, function () { load(sector, currency); }); });
-        });
         box.querySelectorAll('[data-pres]').forEach(function (b) {
           b.addEventListener('click', async function () {
             try { await DP.presentation.show(b.dataset.pres); } catch (e) { DP.ui.toast(DP.ui.errMsg(e), 'bad'); }
