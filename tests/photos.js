@@ -241,6 +241,8 @@ function bigJpegBase64(page) {
     check('projets disponibles : photo d’activité et légende', (await countOf(pr.page, '#results .gallery-item img')) === 1 && pr.text.indexOf('Étal du marché') !== -1);
     check('projets disponibles : aucun bouton de demande pour le partenaire', (await countOf(pr.page, '#results [data-ask]')) === 0);
     check('projets disponibles : renvoi vers l’Administrateur pour une mise en relation', pr.text.indexOf('Pour une mise en relation') !== -1);
+    check('projets disponibles : bouton « Solliciter la mise en contact » vers la messagerie (projet prêt)',
+      (await countOf(pr.page, '#results a[href="#/messages"]:has-text("Solliciter la mise en contact")')) === 1);
     check('projets disponibles : demande déjà envoyée indiquée', pr.text.indexOf('Demande de mise en relation') !== -1);
     check('projets disponibles : projet en cours sans sollicitation', /en cours d.accompagnement/.test(pr.text));
     await pr.page.locator('#f-filter input[name="sector"]').fill('commerce');
@@ -251,6 +253,40 @@ function bigJpegBase64(page) {
     check('projets disponibles : lien du menu renommé', /Projets disponibles/.test(menu), menu.trim());
     check('projets disponibles : aucune erreur JavaScript', pr.errors.length === 0, pr.errors.join(' | '));
     check('projets disponibles : aucun « undefined », « null » ou « NaN »', !BAD.test(pr.text), (pr.text.match(BAD) || [''])[0]);
+    await ctx.close();
+
+    /* 6) Partenaire : profil — photo de profil et logo de l’organisation */
+    const sPP = { profile: sP.profile, partner: { id: 'pt-1', profile_id: PARTNER_ID, legal_name: 'Banque Test', category: 'bank', status: 'active',
+      representative: 'Directeur', phone: '+243800000002', geography: 'Kinshasa', sectors: 'Commerce', description: 'Présentation',
+      ticket_min: 100, ticket_max: 5000, logo_path: null }, projects: [] };
+    ctx = await openContext(browser, sPP, PARTNER_ID);
+    const pp = await visit(ctx, '#/partenaire/profil');
+    check('profil partenaire : champ photo de profil présent', (await countOf(pp.page, '#par-photo [data-photo-input]')) === 1);
+    check('profil partenaire : champ logo présent', (await countOf(pp.page, '#par-logo [data-photo-input]')) === 1);
+    check('profil partenaire : cartes « Photo de profil » et « Logo de l’organisation »', pp.text.indexOf('Photo de profil') !== -1 && pp.text.indexOf('Logo de l’organisation') !== -1);
+    await pp.page.locator('#par-logo [data-photo-input]').setInputFiles({ name: 'logo.png', mimeType: 'image/png', buffer: TINY_PNG });
+    const offerLogo = await until(async () => (await countOf(pp.page, '#par-logo [data-save]')) === 1, 5000);
+    check('profil partenaire : petit logo → bouton « Enregistrer la photo »', offerLogo);
+    if (offerLogo) {
+      await pp.page.locator('#par-logo [data-save]').click();
+      const savedLogo = await until(async () => /Photo enregistrée/.test(await noticeText(pp.page, '#par-logo')), 15000);
+      const upLogo = ctx.__log.find((e) => e.method === 'POST' && e.path.indexOf('/storage/v1/object/visuels/' + PARTNER_ID + '/logo-') === 0);
+      check('profil partenaire : logo envoyé dans le dossier de l’utilisateur', !!upLogo, upLogo ? upLogo.path : 'absent');
+      const patchLogo = ctx.__log.find((e) => e.method === 'PATCH' && e.path === '/rest/v1/partners');
+      check('profil partenaire : chemin du logo enregistré dans la fiche', savedLogo && !!patchLogo && patchLogo.body.indexOf('"logo_path":"' + PARTNER_ID + '/logo-') !== -1,
+        patchLogo ? patchLogo.body.slice(0, 120) : 'absent');
+    }
+    await pp.page.locator('#par-photo [data-photo-input]').setInputFiles({ name: 'photo.png', mimeType: 'image/png', buffer: TINY_PNG });
+    const offerPhoto = await until(async () => (await countOf(pp.page, '#par-photo [data-save]')) === 1, 5000);
+    check('profil partenaire : petite photo de profil → bouton « Enregistrer la photo »', offerPhoto);
+    if (offerPhoto) {
+      await pp.page.locator('#par-photo [data-save]').click();
+      const savedPhoto = await until(async () => /Photo enregistrée/.test(await noticeText(pp.page, '#par-photo')), 15000);
+      const patchPhoto = ctx.__log.find((e) => e.method === 'PATCH' && e.path === '/rest/v1/profiles' && e.body.indexOf('"photo_path":"' + PARTNER_ID + '/photo-') !== -1);
+      check('profil partenaire : photo de profil enregistrée dans le profil', savedPhoto && !!patchPhoto);
+    }
+    check('profil partenaire : aucune erreur JavaScript', pp.errors.length === 0, pp.errors.join(' | '));
+    check('profil partenaire : aucun « undefined », « null » ou « NaN »', !BAD.test(pp.text), (pp.text.match(BAD) || [''])[0]);
     await ctx.close();
   } finally {
     await browser.close();

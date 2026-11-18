@@ -109,11 +109,41 @@
   }
 
   /* ---------- Profil ---------- */
+  /* Logo de l'organisation : envoi, enregistrement du chemin, suppression de l'ancien logo. */
+  async function saveLogo(p, file) {
+    var old = p.logo_path;
+    var path = await DP.photo.uploadTo('visuels', file, 'logo-');
+    try {
+      await DP.api.update('partners', { id: 'eq.' + p.id }, { logo_path: path });
+    } catch (e) {
+      /* Le logo n'a pas pu être enregistré : on retire le fichier envoyé pour ne pas laisser d'orphelin. */
+      DP.api.removeFrom('visuels', path).catch(function () {});
+      throw e;
+    }
+    if (old && old.indexOf(DP.api.uid + '/') === 0) DP.api.removeFrom('visuels', old).catch(function () {});
+    cache.row = null;
+    return path;
+  }
+
   async function renderProfile(el) {
     var p = await myPartner(true);
     if (!p) { el.innerHTML = noPartnerHtml('Mon profil partenaire'); return; }
+    var initiale = (p.legal_name || '?').charAt(0).toUpperCase();
+    var photoUrl = DP.app.profile && DP.app.profile.photo_path
+      ? await DP.api.signedUrlFor('visuels', DP.app.profile.photo_path, 3600).catch(function () { return ''; }) : '';
+    var logoUrl = p.logo_path ? await DP.api.signedUrlFor('visuels', p.logo_path, 3600).catch(function () { return ''; }) : '';
     el.innerHTML = DP.ui.header('Mon profil partenaire',
         'Ces informations peuvent être consultées par l’Administrateur et figurer dans les dossiers que vous demandez.') +
+      '<div class="grid-2">' +
+      DP.ui.card('Photo de profil', '<div id="par-photo">' + DP.photo.html({
+        mode: 'save', url: photoUrl, initials: initiale, alt: 'Votre photo de profil',
+        label: 'Choisir une nouvelle photo (JPG, PNG ou WebP — 3 Mo maximum)'
+      }) + '</div>') +
+      DP.ui.card('Logo de l’organisation', '<div id="par-logo">' + DP.photo.html({
+        mode: 'save', url: logoUrl, initials: initiale, alt: 'Logo de l’organisation',
+        label: 'Choisir un nouveau logo (JPG, PNG ou WebP — 3 Mo maximum, facultatif)'
+      }) + '</div>') +
+      '</div>' +
       DP.ui.card('Identité', '<dl class="kv"><dt>Catégorie</dt><dd>' + esc(catLabel(p.category)) +
         '</dd><dt>E-mail de contact</dt><dd>' + esc(p.contact_email || '—') + '</dd></dl>' +
         '<p class="small muted">Pour changer de catégorie, écrivez à l’Administrateur via la messagerie privée.</p>') +
@@ -130,6 +160,15 @@
         DP.ui.field({ name: 'ticket_min', label: 'Ticket minimum indicatif (USD)', type: 'number', step: 'any', min: 0, dataType: 'number', value: p.ticket_min, hint: 'Indicatif, sans engagement.' }) +
         DP.ui.field({ name: 'ticket_max', label: 'Ticket maximum indicatif (USD)', type: 'number', step: 'any', min: 0, dataType: 'number', value: p.ticket_max }) + '</div>' +
         '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer</button></div></form>');
+
+    DP.photo.bind(el.querySelector('#par-photo'), {
+      mode: 'save',
+      save: function (file) { return DP.photo.saveProfile(file); }
+    });
+    DP.photo.bind(el.querySelector('#par-logo'), {
+      mode: 'save',
+      save: function (file) { return saveLogo(p, file); }
+    });
 
     DP.ui.bindForm(el.querySelector('#f-partner'), async function (d) {
       if (!d.legal_name) throw new Error('La raison sociale est obligatoire.');
@@ -209,7 +248,7 @@
       action = '<p class="small">Demande de mise en relation : ' + DP.ui.badge(r.connection_status) + '</p>';
     } else if (r.status === 'ready') {
       action = '<p class="small muted">Pour une mise en relation, écrivez à l’Administrateur.</p>' +
-        '<a class="btn btn-ghost btn-sm" href="#/messages">Écrire à l’Administrateur</a>';
+        '<a class="btn btn-primary btn-sm" href="#/messages">Solliciter la mise en contact</a>';
     } else {
       action = '<p class="small muted">Mise en relation non disponible : ce projet est ' +
         (r.status === 'in_progress' ? 'en cours d’accompagnement.' : 'clôturé.') + '</p>';
