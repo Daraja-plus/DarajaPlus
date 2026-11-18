@@ -315,7 +315,7 @@
     var rows = (await DP.api.get('presentations', { select: '*', order: 'updated_at.desc', limit: 300 }))
       .filter(function (r) { return r.project_id; });
     var people = await DP.api.get('profiles', { select: 'id,identifiant,prenom,nom,role', role: 'in.(beneficiary,agent)' });
-    var projets = await DP.api.get('projects', { select: 'id,title', limit: 500 });
+    var projets = await DP.api.get('projects', { select: 'id,title,status', limit: 500 });
     var byUser = {};
     people.forEach(function (p) { byUser[p.id] = p; });
     var byProjet = {};
@@ -340,23 +340,54 @@
     el.querySelectorAll('[data-revoir]').forEach(function (b) {
       b.addEventListener('click', function () {
         var row = rows.find(function (r) { return r.project_id === b.dataset.revoir; });
-        if (row) ouvrirRevue(row, byUser[row.user_id] || {}, (byProjet[row.project_id] || {}).title || '');
+        if (row) ouvrirRevue(row, byUser[row.user_id] || {}, byProjet[row.project_id] || {});
       });
     });
   }
 
-  async function ouvrirRevue(row, p, titreProjet) {
+  /* Statuts du projet proposés à l'administrateur (libellés communs : DP.labels.status). */
+  var STATUTS_PROJET = ['draft', 'incomplete', 'to_verify', 'ready', 'in_progress', 'closed'];
+
+  /* Changement du statut du projet, avec la même liste que la fiche des projets. */
+  function choisirStatutProjet(projetId, statutActuel, quandEnregistre) {
+    var options = STATUTS_PROJET.map(function (k) {
+      return '<option value="' + k + '"' + (k === statutActuel ? ' selected' : '') + '>' + esc(DP.labels.status[k] || k) + '</option>';
+    }).join('');
+    var sm = ui.modal('Statut du projet', '<form class="form" id="sp"><div class="field field-full"><label for="sp-s">Nouveau statut</label>' +
+      '<select class="input" id="sp-s" name="status" required>' + options + '</select></div>' +
+      '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer</button></div></form>');
+    ui.bindForm(sm.el.querySelector('#sp'), async function (d) {
+      var rows = await DP.api.update('projects', { id: 'eq.' + projetId }, { status: d.status });
+      /* La base ne renvoie aucune ligne modifiée si les règles d'accès refusent la modification (projet d'agent, par exemple). */
+      if (!rows || !rows.length) throw new Error('Le statut n’a pas été enregistré : ce projet ne peut pas être modifié avec ce compte.');
+      sm.close();
+      quandEnregistre(d.status);
+      return 'Statut du projet mis à jour.';
+    }, null);
+  }
+
+  async function ouvrirRevue(row, p, projet) {
     var urls = await Promise.all((row.photos || []).map(function (ph) {
       return DP.api.signedUrlFor('visuels', ph, 3600).catch(function () { return ''; });
     }));
     var visible = row.statut === 'visible';
+    var titreProjet = projet.title || '';
     var actions = visible
       ? '<button type="button" class="btn btn-outline" data-set="retirer">Retirer la visibilité</button>'
       : '<button type="button" class="btn btn-primary" data-set="visible">Rendre visible aux partenaires</button>';
     var m = ui.modal('Présentation de ' + (p.identifiant || 'ce porteur de projet') + (titreProjet ? ' — ' + titreProjet : ''),
-      '<p class="small muted">Statut : ' + (STATUT_ADMIN[row.statut] || '') + ' · Dernière modification : ' + ui.dateTime(row.updated_at) + '</p>' +
+      '<p class="small muted">Statut de la présentation : ' + (STATUT_ADMIN[row.statut] || '') + ' · Dernière modification : ' + ui.dateTime(row.updated_at) + '</p>' +
+      '<p class="small muted">Statut du projet : <span data-statut-projet-val>' + (projet.status ? ui.badge(projet.status) : '') + '</span></p>' +
         readHtml(row.content || {}, urls),
-      actions + ' <button type="button" class="btn btn-ghost" data-close>Fermer</button>');
+      '<div class="foot-line"><button type="button" class="btn btn-outline" data-statut-projet>Changer le statut du projet</button></div>' +
+      '<div class="foot-line">' + actions + ' <button type="button" class="btn btn-ghost" data-close>Fermer</button></div>');
+
+    m.el.querySelector('[data-statut-projet]').addEventListener('click', function () {
+      choisirStatutProjet(row.project_id, projet.status || '', function (nouveau) {
+        projet.status = nouveau;
+        m.el.querySelector('[data-statut-projet-val]').innerHTML = ui.badge(nouveau);
+      });
+    });
 
     m.el.querySelector('[data-set]').addEventListener('click', async function (e) {
       var rendreVisible = e.currentTarget.dataset.set === 'visible';

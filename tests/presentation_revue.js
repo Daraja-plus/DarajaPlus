@@ -2,6 +2,7 @@
    A) administrateur : lien « Présentations » dans le menu ; liste avec le statut « À vérifier » ;
       ouverture de la fiche (11 rubriques) ; « Rendre visible aux partenaires » après confirmation ;
       envoi de la visibilité à la base ;
+      changement du statut du projet (bouton au-dessus de la visibilité ; refus de la base signalé) ;
    B) partenaire : bouton « Voir la présentation » seulement si la fiche est visible ; fiche ouverte avec 10 rubriques
       (sans la rubrique « Vision », même si la réponse la contenait) ; zone, quartier et rue affichés ;
    C) aucune erreur JavaScript et aucun « undefined », « null » ou « NaN ».
@@ -74,7 +75,7 @@ async function openContext(browser, role, opts) {
     const p = url.pathname;
     const m = req.method();
     if (m === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS, body: '' });
-    context.__log.push({ method: m, path: p, body: req.postData() || '' });
+    context.__log.push({ method: m, path: p, search: url.search, body: req.postData() || '' });
     const reply = (body) => route.fulfill({ status: 200, headers: CORS, contentType: 'application/json', body: JSON.stringify(body) });
     if (p === '/auth/v1/user') return reply({ id: me.id, email: me.email, aud: 'authenticated' });
     if (p === '/rest/v1/profiles') return reply(filtrer(PROFILES, url.searchParams));
@@ -82,7 +83,10 @@ async function openContext(browser, role, opts) {
     if (p === '/rest/v1/presentations' && m === 'GET') {
       return reply([{ project_id: PROJET_ID, user_id: BEN_ID, statut: 'publiee', content: CONTENU, photos: [], publiee_at: NOW, visible_at: null, updated_at: NOW, created_at: NOW }]);
     }
-    if (p === '/rest/v1/projects') return reply([{ id: PROJET_ID, title: 'Achat de matériel', beneficiary_id: 'b-1' }]);
+    if (p === '/rest/v1/projects') {
+      /* patchVide : la base refuse la modification et ne renvoie aucune ligne. */
+      return reply(m === 'PATCH' && opts && opts.patchVide ? [] : [{ id: PROJET_ID, title: 'Achat de matériel', beneficiary_id: 'b-1', status: 'ready' }]);
+    }
     if (p === '/rest/v1/rpc/admin_set_presentation_visibility') return reply('visible');
     if (p === '/rest/v1/rpc/partner_available_projects') {
       return reply([{ project_id: PROJET_ID, reference: PROJET_ID, title: 'Achat de matériel', sector: 'Commerce', description: 'Description du projet',
@@ -145,6 +149,28 @@ async function bodyText(page) {
       fiche.indexOf('Kiosque test') !== -1 && fiche.indexOf('Vision') !== -1);
     check('admin : la fiche porte le nom du projet', fiche.indexOf('Achat de matériel') !== -1);
 
+    /* Statut du projet : bouton au-dessus de l'action de visibilité */
+    const bStatut = va.page.locator('.modal [data-statut-projet]');
+    const bVisible = va.page.locator('.modal [data-set="visible"]');
+    check('admin : bouton « Changer le statut du projet » présent', (await bStatut.count()) === 1);
+    const yStatut = (await bStatut.boundingBox()) || { y: 0 };
+    const yVisible = (await bVisible.boundingBox()) || { y: 0 };
+    check('admin : le bouton de statut est au-dessus de « Rendre visible aux partenaires »', yStatut.y < yVisible.y, yStatut.y + ' / ' + yVisible.y);
+    await bStatut.click();
+    const choix = await until(async () => (await va.page.locator('#sp-s').count()) === 1, 5000);
+    check('admin : le choix s’ouvre avec le statut actuel « Prêt à présenter »',
+      choix && (await va.page.locator('#sp-s').inputValue()) === 'ready');
+    await va.page.locator('#sp-s').selectOption('in_progress');
+    await va.page.locator('#sp [type="submit"]').click();
+    await until(async () => ca.__log.some((e) => e.method === 'PATCH' && e.path === '/rest/v1/projects'), 5000);
+    const patch = ca.__log.filter((e) => e.method === 'PATCH' && e.path === '/rest/v1/projects');
+    check('admin : statut envoyé à la base une seule fois, pour le bon projet',
+      patch.length === 1 && patch[0].body.indexOf('"status":"in_progress"') !== -1 && patch[0].search.indexOf('id=eq.' + PROJET_ID) !== -1,
+      patch.map((a) => a.body + ' ' + a.search).join(' | '));
+    const statutMaj = await until(async () => (await va.page.locator('[data-statut-projet-val]').innerText()).indexOf('En cours') !== -1, 5000);
+    check('admin : le statut affiché dans la fiche est mis à jour', statutMaj);
+    check('admin : la fiche reste ouverte après le changement de statut', (await va.page.locator('.modal [data-set="visible"]').count()) === 1);
+
     await va.page.locator('.modal [data-set="visible"]').click();
     const demande = await until(async () => (await bodyText(va.page)).indexOf('Rendre cette présentation visible') !== -1, 5000);
     check('admin : demande de confirmation avant visibilité',
@@ -161,6 +187,22 @@ async function bodyText(page) {
     check('admin : confirmation affichée après la visibilité', confirme);
     check('admin : aucune erreur JavaScript', va.errors.length === 0, va.errors.join(' | '));
     check('admin : aucun « undefined », « null » ou « NaN »', !BAD.test(await bodyText(va.page)));
+
+    /* Refus de la base (projet d'agent sans fiche bénéficiaire) : le message doit le dire et le statut ne change pas */
+    const cr = await openContext(browser, 'admin', { patchVide: true });
+    const vr = await visit(cr, '#/admin/presentations');
+    await vr.page.locator('[data-revoir]').first().click();
+    await until(async () => (await vr.page.locator('.modal [data-statut-projet]').count()) === 1, 8000);
+    await vr.page.locator('.modal [data-statut-projet]').click();
+    await until(async () => (await vr.page.locator('#sp-s').count()) === 1, 5000);
+    await vr.page.locator('#sp-s').selectOption('closed');
+    await vr.page.locator('#sp [type="submit"]').click();
+    const refus = await until(async () => (await bodyText(vr.page)).indexOf('n’a pas été enregistré') !== -1, 5000);
+    const statutRefuse = await vr.page.locator('[data-statut-projet-val]').innerText().catch(() => '');
+    check('admin : refus de la base signalé, statut du projet inchangé',
+      refus && statutRefuse.indexOf('Prêt') !== -1 && statutRefuse.indexOf('Clôturé') === -1, statutRefuse);
+    check('admin (refus) : aucune erreur JavaScript', vr.errors.length === 0, vr.errors.join(' | '));
+    await cr.close();
 
     /* B) Partenaire : bouton seulement si la fiche est visible */
     for (const visible of [true, false]) {
