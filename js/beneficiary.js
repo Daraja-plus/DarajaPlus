@@ -111,7 +111,11 @@
     var presentation = step ? '' : ui.card('Vos projets et leurs présentations', '<p class="small muted">Chaque projet a sa propre présentation, rubrique par rubrique. « Présenter mon projet » crée un projet et sa présentation ; « Mes projets et besoins » liste vos projets existants.</p>' +
       '<div class="btn-row"><a class="btn btn-blue" href="#/espace/presentation/nouveau">Présenter mon projet</a> <a class="btn btn-outline" href="#/espace/projets">Mes projets et besoins</a></div>');
 
-    el.innerHTML = ui.header('Bonjour ' + (b.prenom || '') + ' !', statusText) + step + presentation +
+    /* Présenter son activité (entreprise) : même écran que « Mes entreprises ». L'activité apparaît ensuite dans le profil. */
+    var activite = ui.card('Votre activité', '<p class="small muted">Présentez votre entreprise ou votre activité : nom, secteur, description, produits et services. Elle apparaît ensuite dans votre profil.</p>' +
+      '<div class="btn-row"><a class="btn btn-blue" href="#/espace/entreprises">Présenter mon activité</a></div>');
+
+    el.innerHTML = ui.header('Bonjour ' + (b.prenom || '') + ' !', statusText) + step + presentation + activite +
       ui.card(null, '<dl class="kv">' +
         '<dt>Identifiant</dt><dd><strong>' + esc(pr.identifiant || '—') + '</strong></dd>' +
         '<dt>Code</dt><dd>' + esc(b.code || 'Attribué quand votre catégorie est acceptée') + '</dd>' +
@@ -233,6 +237,19 @@
   }
 
   /* ---------- Profil, identifiant et photo ---------- */
+  /* Activité telle qu'elle apparaît dans le profil (lecture seule ; la modification se fait dans « Mes entreprises »). */
+  function activiteProfilCard(e) {
+    var logo = e.logo_url
+      ? '<img src="' + esc(e.logo_url) + '" alt="Logo de ' + esc(e.name) + '" style="width:56px;height:56px;object-fit:cover;border-radius:8px;flex:none">'
+      : '';
+    return '<div style="display:flex;gap:.75rem;align-items:flex-start;margin-bottom:.75rem">' + logo +
+      '<div style="flex:1;min-width:0"><strong>' + esc(e.name) + '</strong>' +
+      '<div class="small muted">' + esc(e.sector || 'Secteur non précisé') + '</div>' +
+      (e.description ? '<p class="small">' + esc(e.description) + '</p>' : '') +
+      (e.services ? '<p class="small"><strong>Produits et services :</strong> ' + esc(e.services) + '</p>' : '') +
+      '</div></div>';
+  }
+
   async function renderProfile(el) {
     var b = await myBen();
     if (!b) return noBen(el, 'Mon profil');
@@ -243,6 +260,12 @@
     ]);
     var docs = r[0], projects = r[1];
     var photo = pr.photo_path ? await DP.api.signedUrlFor('visuels', pr.photo_path, 3600).catch(function () { return ''; }) : '';
+    var entreprises = await withLogos(await loadEntreprises(b));
+    var activite = entreprises.length
+      ? entreprises.map(activiteProfilCard).join('') +
+        '<div class="btn-row"><a class="btn btn-sm btn-outline" href="#/espace/entreprises">Modifier mon activité</a></div>'
+      : ui.empty('Aucune activité présentée pour le moment.') +
+        '<div class="btn-row"><a class="btn btn-sm btn-blue" href="#/espace/entreprises">Présenter mon activité</a></div>';
 
     el.innerHTML = ui.header('Mon profil et mes pièces', 'Vos informations et les documents de votre dossier. Aucune pièce n’est partagée sans votre accord.') +
       '<div class="grid-2">' +
@@ -255,6 +278,7 @@
         label: 'Choisir une nouvelle photo (JPG, PNG ou WebP — 3 Mo maximum)'
       }) + '</div>') +
       '</div>' +
+      ui.card('Mon activité', activite) +
       '<div class="grid-2">' +
       ui.card('Mes informations', '<form class="form" id="f-me">' +
         '<div class="field-row">' + ui.field({ name: 'nom', label: 'Nom', value: b.nom, required: true }) +

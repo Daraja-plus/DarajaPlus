@@ -82,6 +82,10 @@ async function openContext(browser, opts) {
     if (p === '/rest/v1/beneficiaries') return reply([ben(opts && opts.category)]);
     if (p === '/rest/v1/projects') return reply([projet(opts && opts.category)]);
     if (p === '/rest/v1/rpc/beneficiary_category_state') return reply({});
+    if (p === '/rest/v1/beneficiary_establishments') return reply(opts && opts.ent ? [{ establishment_id: 'e-1' }] : []);
+    if (p === '/rest/v1/establishments') {
+      return reply(opts && opts.ent ? [{ id: 'e-1', name: 'Couture Test', sector: 'couture', description: 'Confection de vêtements sur mesure', services: 'Robes et retouches', verification_status: 'to_verify', logo_path: null, created_at: '2026-11-13T09:00:00Z' }] : []);
+    }
     if (p === '/rest/v1/presentations') {
       if (m === 'GET') return reply(state.row ? [state.row] : []);
       if (m === 'PATCH') {
@@ -161,6 +165,26 @@ async function bodyText(page) {
     const h2 = await visit(c2, '#/espace');
     check('accueil (catégorie acceptée) : carte « Vos projets et leurs présentations » avec le bouton bleu « Présenter mon projet »',
       (await h2.page.locator('a.btn-blue[href="#/espace/presentation/nouveau"]').count()) === 1 && h2.text.indexOf('Vos projets et leurs présentations') !== -1);
+
+    /* 2 bis) « Présenter mon activité » : bouton sur l'accueil, vers « Mes entreprises » */
+    check('accueil : bouton « Présenter mon activité » vers « Mes entreprises » (catégorie acceptée)',
+      (await h2.page.locator('a.btn-blue[href="#/espace/entreprises"]').count()) === 1 && h2.text.indexOf('Présenter mon activité') !== -1);
+    check('accueil (catégorie non acceptée) : bouton « Présenter mon activité » aussi présent', h1.text.indexOf('Présenter mon activité') !== -1);
+
+    /* 2 ter) Profil : l'activité présentée y apparaît ; sans activité, un message et un bouton */
+    const c2b = await openContext(browser, { category: 'ba', ent: true });
+    const pf = await visit(c2b, '#/espace/profil');
+    check('profil : carte « Mon activité » avec l’entreprise présentée',
+      pf.text.indexOf('Mon activité') !== -1 && pf.text.indexOf('Couture Test') !== -1 && pf.text.indexOf('Confection de vêtements') !== -1);
+    check('profil : lien « Modifier mon activité » vers « Mes entreprises »',
+      (await pf.page.locator('a[href="#/espace/entreprises"]').count()) >= 1);
+    check('profil (activité présentée) : aucune erreur JavaScript', pf.errors.length === 0, pf.errors.join(' | '));
+    check('profil (activité présentée) : aucun « undefined », « null » ou « NaN »', !BAD.test(pf.text));
+    const c2c = await openContext(browser, { category: 'ba' });
+    const pf0 = await visit(c2c, '#/espace/profil');
+    check('profil sans activité : message et bouton « Présenter mon activité »',
+      pf0.text.indexOf('Aucune activité présentée') !== -1 && (await pf0.page.locator('a.btn-blue[href="#/espace/entreprises"]').count()) === 1);
+    check('profil (sans activité) : aucune erreur JavaScript', pf0.errors.length === 0, pf0.errors.join(' | '));
 
     /* 3) Présentation du projet : rubriques, exemples, photos */
     const c3 = await openContext(browser, { category: 'ba' });
