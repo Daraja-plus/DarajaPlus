@@ -105,10 +105,6 @@
     return { zones: r[0], quartiers: r[1], hosts: r[2], agents: r[3] };
   }
 
-  /* Quartiers d’une zone (liste pour les menus déroulants). */
-  function quartiersOfZone(lk, zoneId) {
-    return lk.quartiers.filter(function (q) { return String(q.zone_id) === String(zoneId); }).map(function (q) { return [q.id, q.name]; });
-  }
 
   /* Noms des profils liés à une liste d’identifiants (sans jointure PostgREST). */
   async function profilesFor(ids) {
@@ -371,7 +367,6 @@
     if (p.role === 'partner') partner = (await DP.api.get('partners', { select: '*', profile_id: 'eq.' + p.id }))[0] || null;
     var zmap = byId(lk.zones);
     function zoneName(id) { return zmap[id] ? zmap[id].name : '—'; }
-    function quartierOpts(zoneId) { return quartiersOfZone(lk, zoneId); }
 
     var info = '<dl class="kv"><dt>Nom</dt><dd>' + esc(pname(p)) + '</dd>' +
       '<dt>Rôle demandé</dt><dd>' + esc(DP.labels.role[p.role]) + '</dd>' +
@@ -398,18 +393,15 @@
         return [h.id, zoneName(h.zone_id) + ' — ' + pname(h) + ' (' + (h.code || '') + ')'];
       });
       body = ui.field({ name: 'host', label: 'Hôte encadrant', type: 'select', options: hosts, placeholder: 'Choisir un Hôte actif', required: true, dataType: 'nullable',
-        hint: 'Un Hôte encadre au maximum 10 Agents.' }) +
-        ui.field({ name: 'quartier', label: 'Quartier de rattachement', type: 'select', options: [], placeholder: 'Choisir l’Hôte d’abord', dataType: 'nullable',
-          hint: 'Facultatif. Les quartiers proposés sont ceux de la zone de l’Hôte.' });
+        hint: 'Un Hôte encadre au maximum 10 Agents. Le quartier de l’Agent est attribué automatiquement dans la zone de l’Hôte.' });
     } else if (p.role === 'beneficiary') {
       /* Pas de catégorie ni de parrain ici : le bénéficiaire choisit sa catégorie dans son espace après validation. */
       body = ui.alert('info', '<strong>Après validation</strong>, le bénéficiaire reçoit son identifiant et choisit lui-même sa catégorie dans son espace. ' +
         'Vous pouvez aussi lui affecter un Agent maintenant ou plus tard.') +
         ui.field({ name: 'agent', label: 'Agent (facultatif : l’affectation peut se faire plus tard)', type: 'select', options: lk.agents.map(function (a) {
           return [a.id, pname(a) + ' (' + (a.code || '') + ') — ' + zoneName(a.zone_id)];
-        }), placeholder: 'Aucun Agent pour le moment', dataType: 'nullable' }) +
-        (lk.quartiers.length ? ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: [], placeholder: 'Choisir l’Agent d’abord', dataType: 'nullable',
-          hint: 'Facultatif. Proposé seulement avec un Agent.' }) : '');
+        }), placeholder: 'Aucun Agent pour le moment', dataType: 'nullable',
+          hint: 'Le quartier suit automatiquement l’Agent choisi.' });
     } else {
       body = '<p class="small muted">Compte partenaire : vérifiez l’organisation puis validez. La décision de financement reste au partenaire.</p>';
     }
@@ -426,23 +418,6 @@
     var form = m.el.querySelector('#rv');
     var F = form.elements;
 
-    if (p.role === 'agent' && F.host) {
-      F.host.addEventListener('change', function () {
-        var h = lk.hosts.find(function (x) { return String(x.id) === F.host.value; });
-        F.quartier.innerHTML = options(quartierOpts(h && h.zone_id), '', 'Aucun quartier précis');
-      });
-    }
-    if (p.role === 'beneficiary' && F.agent && F.quartier) {
-      /* Le quartier ne se choisit qu’avec un Agent : il suit la zone de l’Agent. */
-      var refreshQuartier = function () {
-        var a = lk.agents.find(function (x) { return String(x.id) === F.agent.value; });
-        F.quartier.disabled = !a;
-        F.quartier.innerHTML = a ? options(quartierOpts(a.zone_id), '', 'Aucun quartier précis') : options([], '', 'Choisir l’Agent d’abord');
-      };
-      F.agent.addEventListener('change', refreshQuartier);
-      refreshQuartier();
-    }
-
     act(m.el, '[data-decision]', async function (btn) {
       var d = ui.formData(form);
       if (btn.dataset.decision === 'reject') {
@@ -454,18 +429,16 @@
         refresh();
         return;
       }
-      var payload = { p_profile: p.id, p_decision: 'approve', p_reason: null, p_zone: null, p_host: null, p_agent: null, p_category: null, p_sponsor: null, p_quartier: null };
+      var payload = { p_profile: p.id, p_decision: 'approve', p_reason: null, p_zone: null, p_host: null, p_agent: null, p_category: null, p_sponsor: null };
       if (p.role === 'host') {
         if (!d.zone) throw new Error('Choisissez la zone de cet Hôte.');
         payload.p_zone = Number(d.zone);
       } else if (p.role === 'agent') {
         if (!d.host) throw new Error('Choisissez l’Hôte encadrant.');
         payload.p_host = d.host;
-        if (d.quartier) payload.p_quartier = Number(d.quartier);
       } else if (p.role === 'beneficiary') {
         /* Agent facultatif ; catégorie et parrain toujours null (choisis par le bénéficiaire après validation). */
         payload.p_agent = d.agent || null;
-        payload.p_quartier = d.agent && d.quartier ? Number(d.quartier) : null;
       }
       await DP.api.rpc('admin_review_account', payload);
       m.close();
@@ -610,31 +583,19 @@
   async function openAssignAgent(userId) {
     var lk = await lookups();
     var zmap = byId(lk.zones);
-    var hasQ = lk.quartiers.length > 0;
     var m = ui.modal('Affecter un Agent',
       '<p class="small muted">Le bénéficiaire reste en attente de catégorie : il la choisit dans son espace après validation.</p>' +
       (lk.agents.length ? '' : ui.alert('warn', '<strong>Aucun Agent actif pour le moment.</strong> Validez d’abord un Agent.')) +
       '<form class="form" id="as">' +
       ui.field({ name: 'agent', label: 'Agent de rattachement', type: 'select', options: lk.agents.map(function (a) {
         return [a.id, pname(a) + ' (' + (a.code || '') + ') — ' + (zmap[a.zone_id] ? zmap[a.zone_id].name : '—')];
-      }), placeholder: 'Choisir un Agent actif', required: true, dataType: 'nullable' }) +
-      (hasQ ? ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: [], placeholder: 'Choisir l’Agent d’abord', dataType: 'nullable',
-        hint: 'Facultatif. Proposé selon la zone de l’Agent.' }) : '') +
+      }), placeholder: 'Choisir un Agent actif', required: true, dataType: 'nullable',
+        hint: 'Le bénéficiaire prend automatiquement le quartier de l’Agent.' }) +
       '<div class="form-actions"><button class="btn btn-primary" type="submit">Affecter</button></div></form>');
     var form = m.el.querySelector('#as');
-    var F = form.elements;
-    if (hasQ) {
-      var refreshQuartier = function () {
-        var a = lk.agents.find(function (x) { return String(x.id) === F.agent.value; });
-        F.quartier.disabled = !a;
-        F.quartier.innerHTML = a ? options(quartiersOfZone(lk, a.zone_id), '', 'Aucun quartier précis') : options([], '', 'Choisir l’Agent d’abord');
-      };
-      F.agent.addEventListener('change', refreshQuartier);
-      refreshQuartier();
-    }
     ui.bindForm(form, async function (d) {
       if (!d.agent) throw new Error('Choisissez un Agent.');
-      await DP.api.rpc('admin_assign_agent', { p_profile: userId, p_agent: d.agent, p_quartier: d.quartier ? Number(d.quartier) : null });
+      await DP.api.rpc('admin_assign_agent', { p_profile: userId, p_agent: d.agent });
       m.close();
       refresh();
       return 'Agent affecté.';
@@ -1269,16 +1230,14 @@
           return [h.id, zname(h.zone_id) + ' — ' + pname(h) + ' (' + (h.code || '') + ')'];
         });
         return ui.field({ name: 'host', label: 'Hôte encadrant', type: 'select', options: hotes, placeholder: 'Choisir un Hôte actif', required: true, dataType: 'nullable',
-          hint: capTxt('agents_per_host') ? 'Un Hôte encadre au maximum ' + capTxt('agents_per_host') + ' Agents.' : '' }) +
-          ui.field({ name: 'quartier', label: 'Quartier de rattachement', type: 'select', options: [], placeholder: 'Choisir l’Hôte d’abord', dataType: 'nullable',
-            hint: 'Facultatif. Quartiers de la zone de l’Hôte.' });
+          hint: (capTxt('agents_per_host') ? 'Un Hôte encadre au maximum ' + capTxt('agents_per_host') + ' Agents. ' : '') + 'Le quartier de l’Agent est attribué automatiquement.' });
       }
-      /* Ba, Bb, Bg : Agent, quartier et, sauf Gamma, parrain du même Agent. */
+      /* Ba, Bb, Bg : Agent et, sauf Gamma, parrain du même Agent. Le quartier suit l’Agent. */
       var agents = lk.agents.filter(function (a) { return a.id !== p.id; }).map(function (a) {
         return [a.id, pname(a) + ' (' + (a.code || '') + ') — ' + zname(a.zone_id)];
       });
-      var html = ui.field({ name: 'agent', label: 'Agent de rattachement', type: 'select', options: agents, placeholder: 'Choisir un Agent actif', required: true, dataType: 'nullable' }) +
-        ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: [], placeholder: 'Choisir l’Agent d’abord', dataType: 'nullable', hint: 'Facultatif.' });
+      var html = ui.field({ name: 'agent', label: 'Agent de rattachement', type: 'select', options: agents, placeholder: 'Choisir un Agent actif', required: true, dataType: 'nullable',
+        hint: 'Le quartier suit automatiquement l’Agent choisi.' });
       if (cible !== 'bg') {
         html += ui.field({ name: 'sponsor', label: cible === 'bb' ? 'Parrain (Gamma)' : 'Parrain (Bêta)', type: 'select', options: [],
           placeholder: 'Choisir l’Agent d’abord', required: true, dataType: 'nullable',
@@ -1288,20 +1247,11 @@
       return html;
     }
 
-    /* Listes dépendantes : quartiers selon l’Hôte ou l’Agent, parrains selon l’Agent et la catégorie. */
+    /* Listes dépendantes : parrains selon l’Agent et la catégorie. */
     function cabler(cible) {
-      if (!cible || cible === 'host') return;
+      if (!cible || cible === 'host' || cible === 'agent') return;
       var F = form.elements;
-      if (cible === 'agent') {
-        F.host.addEventListener('change', function () {
-          var h = lk.hosts.find(function (x) { return String(x.id) === F.host.value; });
-          F.quartier.innerHTML = options(h ? quartiersOfZone(lk, h.zone_id) : [], '', 'Aucun quartier précis');
-        });
-        return;
-      }
       F.agent.addEventListener('change', function () {
-        var a = lk.agents.find(function (x) { return String(x.id) === F.agent.value; });
-        F.quartier.innerHTML = options(a ? quartiersOfZone(lk, a.zone_id) : [], '', 'Aucun quartier précis');
         if (F.sponsor) {
           var besoin = cible === 'bb' ? 'bg' : 'bb';
           var candidats = data.fiches.filter(function (b) {
@@ -1320,12 +1270,10 @@
       if (cible === 'agent' && p.role === 'agent' && p.host_id) {
         F.host.value = p.host_id;
         F.host.dispatchEvent(new Event('change'));
-        F.quartier.value = p.quartier_id || '';
       }
       if (f && f.category && cible === f.category && f.agent_id) {
         F.agent.value = f.agent_id;
         F.agent.dispatchEvent(new Event('change'));
-        F.quartier.value = f.quartier_id || '';
         if (F.sponsor) F.sponsor.value = f.sponsor_id || '';
       }
     }
@@ -1336,19 +1284,17 @@
     ui.bindForm(form, async function (d) {
       var c = d.cible;
       if (!c) throw new Error('Choisissez une affectation.');
-      var payload = { p_profile: p.id, p_cible: c, p_zone: null, p_host: null, p_agent: null, p_quartier: null, p_sponsor: null };
+      var payload = { p_profile: p.id, p_cible: c, p_zone: null, p_host: null, p_agent: null, p_sponsor: null };
       if (c === 'host') {
         if (!d.zone) throw new Error('Choisissez la zone de l’Hôte.');
         payload.p_zone = Number(d.zone);
       } else if (c === 'agent') {
         if (!d.host) throw new Error('Choisissez l’Hôte encadrant.');
         payload.p_host = d.host;
-        payload.p_quartier = d.quartier ? Number(d.quartier) : null;
       } else {
         if (!d.agent) throw new Error('Choisissez l’Agent de rattachement.');
         if (c !== 'bg' && !d.sponsor) throw new Error('Choisissez le parrain.');
         payload.p_agent = d.agent;
-        payload.p_quartier = d.quartier ? Number(d.quartier) : null;
         payload.p_sponsor = c === 'bg' ? null : d.sponsor;
       }
       /* Modifier une personne déjà placée peut changer son code : on demande confirmation. */

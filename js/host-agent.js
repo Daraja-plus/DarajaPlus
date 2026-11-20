@@ -321,10 +321,9 @@
     var me = DP.app.profile;
     var r = await Promise.all([
       DP.api.rpc('agent_quota', {}),
-      DP.api.get('beneficiaries', { select: 'id,code,category,prenom,nom', agent_id: 'eq.' + me.id, category: 'in.(bg,bb)', status: 'neq.archived', order: 'code.asc' }),
-      DP.api.get('quartiers', { select: '*', zone_id: 'eq.' + me.zone_id, order: 'id.asc' })
+      DP.api.get('beneficiaries', { select: 'id,code,category,prenom,nom', agent_id: 'eq.' + me.id, category: 'in.(bg,bb)', status: 'neq.archived', order: 'code.asc' })
     ]);
-    var q = r[0], sponsors = r[1], quartiers = r[2];
+    var q = r[0], sponsors = r[1];
     var caps = q.caps || {};
     var left = function (c) { return (caps[c] || 0) - (q[c] || 0); };
     el.innerHTML = ui.header('Nouveau bénéficiaire', 'Enregistrez la fiche. Elle reste « à vérifier » tant que l’Hôte ne l’a pas activée.') +
@@ -337,8 +336,8 @@
         ui.field({ name: 'prenom', label: 'Prénom', required: true }) +
         '<div class="field-row">' + ui.field({ name: 'phone', label: 'Téléphone', placeholder: '+243…' }) +
         ui.field({ name: 'email', label: 'E-mail', type: 'text', placeholder: 'facultatif' }) + '</div>' +
-        '<div class="field-row">' + ui.field({ name: 'sponsor', label: 'Parrain', type: 'select', options: [], placeholder: 'Choisir la catégorie', dataType: 'nullable' }) +
-        ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: quartiers.map(function (x) { return [x.id, x.name]; }), placeholder: 'Non précisé', dataType: 'nullable' }) + '</div>' +
+        '<div class="field-row">' + ui.field({ name: 'sponsor', label: 'Parrain', type: 'select', options: [], placeholder: 'Choisir la catégorie', dataType: 'nullable' }) + '</div>' +
+        '<p class="small muted">Le quartier du bénéficiaire est automatiquement celui de votre Agent.</p>' +
         '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer la fiche</button></div></form>');
 
     var form = el.querySelector('#f-new');
@@ -359,7 +358,7 @@
       await DP.api.rpc('create_beneficiary', {
         p_category: d.category, p_nom: d.nom, p_postnom: d.postnom, p_prenom: d.prenom,
         p_phone: d.phone || null, p_email: d.email || null, p_agent: me.id,
-        p_sponsor: d.sponsor || null, p_quartier: d.quartier ? Number(d.quartier) : null,
+        p_sponsor: d.sponsor || null,
         p_user: null, p_status: d.status
       });
       location.hash = '#/agent/beneficiaires';
@@ -374,10 +373,9 @@
     if (!b) throw new Error('Bénéficiaire introuvable ou non rattaché à votre compte.');
     var r = await Promise.all([
       DP.api.get('projects', { select: '*', beneficiary_id: 'eq.' + id, order: 'created_at.desc' }),
-      DP.api.get('documents', { select: '*', owner_beneficiary_id: 'eq.' + id, order: 'created_at.desc' }),
-      DP.api.get('quartiers', { select: '*', zone_id: 'eq.' + me.zone_id, order: 'id.asc' })
+      DP.api.get('documents', { select: '*', owner_beneficiary_id: 'eq.' + id, order: 'created_at.desc' })
     ]);
-    var projects = r[0], docs = r[1], quartiers = r[2];
+    var projects = r[0], docs = r[1];
     var editableStatus = STATUS_BEN_AGENT.some(function (s) { return s[0] === b.status; });
     el.innerHTML = ui.header(bname(b), (b.code ? b.code + ' · ' : '') + (b.category ? (DP.labels.category[b.category] || b.category) : 'En attente de catégorie'),
         '<a class="btn btn-outline" href="#/agent/beneficiaires">← Mes bénéficiaires</a>') +
@@ -388,7 +386,7 @@
         ui.field({ name: 'prenom', label: 'Prénom', value: b.prenom, required: true }) +
         '<div class="field-row">' + ui.field({ name: 'phone', label: 'Téléphone', value: b.phone }) +
         ui.field({ name: 'email', label: 'E-mail', value: b.email }) + '</div>' +
-        ui.field({ name: 'quartier', label: 'Quartier', type: 'select', options: quartiers.map(function (x) { return [x.id, x.name]; }), value: b.quartier_id, placeholder: 'Non précisé', dataType: 'nullable' }) +
+        '<p class="small muted">Le quartier suit automatiquement celui de votre Agent.</p>' +
         (editableStatus
           ? ui.field({ name: 'status', label: 'Statut', type: 'select', options: STATUS_BEN_AGENT, value: b.status })
           : '<p class="small muted">Statut actuel : <strong>' + esc(DP.labels.status[b.status] || b.status) + '</strong>. Seul l’Hôte peut le modifier.</p>') +
@@ -402,7 +400,7 @@
       ui.card('Pièces du bénéficiaire', docsTable(docs, 'Aucune pièce déposée pour le moment.'));
 
     ui.bindForm(el.querySelector('#f-ben'), async function (d) {
-      var patch = { nom: d.nom, postnom: d.postnom, prenom: d.prenom, phone: d.phone || null, email: d.email || null, quartier_id: d.quartier ? Number(d.quartier) : null };
+      var patch = { nom: d.nom, postnom: d.postnom, prenom: d.prenom, phone: d.phone || null, email: d.email || null };
       if (editableStatus && d.status) patch.status = d.status;
       await DP.api.update('beneficiaries', { id: 'eq.' + id }, patch);
       refresh();
