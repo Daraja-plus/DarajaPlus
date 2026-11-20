@@ -188,8 +188,17 @@
   }
 
   /* Bouton « Message » : ouvre le fil de messages privés avec cette personne. */
+  /* Remplacement du titulaire : proposé seulement si le compte occupe un poste (zone, quartier ou code). */
+  function peutRemplacer(p) {
+    if (p.status !== 'active' && p.status !== 'suspended') return false;
+    if (p.role === 'host') return !!p.zone_id;
+    if (p.role === 'agent') return !!p.quartier_id;
+    if (p.role === 'beneficiary') return !!p.code;
+    return false;
+  }
   function actionsForAccount(p) {
-    return actionsStatut(p) + ' <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Envoyer un message privé à ' + esc(pname(p)) + '">Message</a>';
+    var remplacer = peutRemplacer(p) ? ' <button class="btn btn-sm btn-outline" type="button" data-remplacer-compte="' + esc(p.id) + '">Remplacer</button>' : '';
+    return actionsStatut(p) + remplacer + ' <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Envoyer un message privé à ' + esc(pname(p)) + '">Message</a>';
   }
 
   function actionsStatut(p) {
@@ -319,6 +328,11 @@
       ], rows, termes.length ? 'Aucun compte ne correspond à cette recherche.' : filter === 'online' ? 'Personne n’est en ligne pour le moment.' : 'Aucun compte dans cette catégorie.'));
 
     act(el, '[data-review]', function (b) { return openReview(map[b.dataset.review], lk); });
+    act(el, '[data-remplacer-compte]', function (b) {
+      var p = map[b.dataset.remplacerCompte];
+      var libelle = p.role === 'host' ? 'l’Hôte ' + pname(p) : p.role === 'agent' ? 'l’Agent ' + pname(p) : 'le bénéficiaire ' + pname(p);
+      return openRemplacer(p.role, p.id, libelle);
+    });
     var formRecherche = el.querySelector('#recherche-comptes');
     if (formRecherche) formRecherche.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -471,16 +485,11 @@
         { label: 'Agents', cls: 'num', render: function (r) { return r.agents + ' / 10'; } },
         { label: 'Action', cls: 'actions', render: function (r) {
           if (!r.host) return '<a class="btn btn-sm btn-outline" href="#/admin/comptes">Voir les comptes</a>';
-          var remplacer = '<button class="btn btn-sm btn-outline" type="button" data-remplacer="' + esc(r.host.id) + '">Remplacer</button> ';
-          return remplacer + (r.host.status === 'active'
+          return (r.host.status === 'active'
             ? '<button class="btn btn-sm btn-outline" type="button" data-suspend="' + esc(r.host.id) + '">Suspendre</button>'
             : (r.host.status === 'suspended' ? '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(r.host.id) + '">Réactiver</button>' : '—'));
         } }
       ], rows, 'Aucune zone.'));
-    act(el, '[data-remplacer]', function (b) {
-      var h = hmap[b.dataset.remplacer];
-      return openRemplacer('host', h.id, 'l’Hôte ' + pname(h));
-    });
     act(el, '[data-suspend]', async function (b) {
       var h = hmap[b.dataset.suspend];
       if (!(await ui.confirm('Suspendre l’Hôte ' + pname(h) + ' ?', 'Suspendre'))) return;
@@ -525,17 +534,11 @@
         } },
         { label: 'Statut', render: function (a) { return ui.badge(a.status); } },
         { label: 'Action', cls: 'actions', render: function (a) {
-          var remplacer = a.status === 'active' || a.status === 'suspended'
-            ? '<button class="btn btn-sm btn-outline" type="button" data-remplacer="' + esc(a.id) + '">Remplacer</button> ' : '';
-          if (a.status === 'active') return remplacer + '<button class="btn btn-sm btn-outline" type="button" data-suspend="' + esc(a.id) + '">Suspendre</button>';
-          if (a.status === 'suspended') return remplacer + '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(a.id) + '">Réactiver</button>';
+          if (a.status === 'active') return '<button class="btn btn-sm btn-outline" type="button" data-suspend="' + esc(a.id) + '">Suspendre</button>';
+          if (a.status === 'suspended') return '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(a.id) + '">Réactiver</button>';
           return '<a class="btn btn-sm btn-outline" href="#/admin/comptes">Examiner</a>';
         } }
       ], agents, 'Aucun Agent pour le moment.'));
-    act(el, '[data-remplacer]', function (b) {
-      var a = map[b.dataset.remplacer];
-      return openRemplacer('agent', a.id, 'l’Agent ' + pname(a));
-    });
     act(el, '[data-suspend]', async function (b) {
       var a = map[b.dataset.suspend];
       if (!(await ui.confirm('Suspendre l’Agent ' + pname(a) + ' ? Ses bénéficiaires restent rattachés à lui.', 'Suspendre'))) return;
@@ -577,9 +580,7 @@
         { label: 'Action', cls: 'actions', render: function (b) {
           /* Un brouillon sans Agent peut recevoir un Agent ; le bouton disparaît ensuite. */
           var assign = b.status === 'draft' && b.user_id ? '<button class="btn btn-sm btn-primary" type="button" data-assign="' + esc(b.user_id) + '">Affecter un Agent</button> ' : '';
-          /* Une fiche active peut changer de titulaire ; le serveur contrôle le compte choisi. */
-          var remplacer = b.status === 'active' && b.user_id ? '<button class="btn btn-sm btn-outline" type="button" data-remplacer-ben="' + esc(b.id) + '">Remplacer</button> ' : '';
-          return assign + remplacer + '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(b.id) + '">Statut</button>';
+          return assign + '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(b.id) + '">Statut</button>';
         } }
       ], rows, 'Aucun bénéficiaire ne correspond à ces filtres.'));
     bindFilters(el);
@@ -590,10 +591,6 @@
       });
     });
     act(el, '[data-assign]', function (b) { return openAssignAgent(b.dataset.assign); });
-    act(el, '[data-remplacer-ben]', function (b) {
-      var x = map[b.dataset.remplacerBen];
-      return openRemplacer('beneficiary', x.user_id, 'le bénéficiaire ' + bcode(x));
-    });
   }
 
   /* Affectation d’un Agent à un bénéficiaire en brouillon (catégorie non encore choisie). Le serveur contrôle la règle. */

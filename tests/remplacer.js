@@ -1,10 +1,10 @@
-/* Test du remplacement d’un titulaire (aucun appel réel à Supabase) :
-   1) Hôtes : seul un compte actif, sans zone ni code, est proposé ; l’appel envoie le poste et le nouveau titulaire ;
-   2) Agents : seul un compte actif, sans quartier ni code, est proposé ; l’appel est correct ;
-   3) Bénéficiaires : seule une fiche active a le bouton ; le compte propre n’est pas proposé ; l’appel est correct ;
-   4) aucune erreur JavaScript sur ces écrans.
+/* Test du bouton « Remplacer » sur la page Comptes à valider (aucun appel réel à Supabase) :
+   1) le bouton n’apparaît que sur les comptes qui occupent un poste (Hôte avec zone, Agent avec quartier,
+      bénéficiaire avec code), à côté de « Message » et « Suspendre » ;
+   2) pour chaque rôle, la fenêtre ne propose que le candidat valide, et l’appel envoyé au serveur est correct ;
+   3) les listes Hôtes, Agents et Bénéficiaires n’ont plus de bouton « Remplacer ».
    Usage :
-     1) servir le dossier :  python3 -m http.server 8765 --bind 127.0.0.1 --directory /chemin/vers/DarajaPlus
+     1) servir le dossier :  python3 -m http.server 8765 --bind 127.0.0.1   (depuis le dossier DarajaPlus)
      2) lancer le test   :  node tests/remplacer.js        (variable BASE pour une autre adresse)
    Prérequis : Playwright avec Chromium installé. */
 
@@ -39,14 +39,14 @@ function donnees() {
   return {
     profiles: [
       profil({ id: ADMIN_ID, role: 'admin', prenom: 'Admin', nom: 'Test' }),
-      profil({ id: H1, role: 'host', zone_id: 1, code: 'AH1', prenom: 'Hôte', nom: 'Un' }),
-      profil({ id: H2, role: 'host', status: 'active', prenom: 'Hôte', nom: 'Deux' }),           // libre : proposé
-      profil({ id: H3, role: 'host', zone_id: 2, code: 'AH2', prenom: 'Hôte', nom: 'Trois' }),  // zone prise : exclu
+      profil({ id: H1, role: 'host', zone_id: 1, code: 'AH1', prenom: 'Hôte', nom: 'Un' }),                  // occupe la zone 1
+      profil({ id: H2, role: 'host', prenom: 'Hôte', nom: 'Deux' }),                                         // sans poste : pas de bouton, candidat
+      profil({ id: H3, role: 'host', zone_id: 2, code: 'AH2', prenom: 'Hôte', nom: 'Trois' }),              // occupe la zone 2
       profil({ id: A1, role: 'agent', zone_id: 1, host_id: H1, quartier_id: 1, code: 'AH1A1', prenom: 'Agent', nom: 'Un' }),
-      profil({ id: A2, role: 'agent', prenom: 'Agent', nom: 'Deux' }),                            // libre : proposé
-      profil({ id: A3, role: 'agent', zone_id: 1, host_id: H1, quartier_id: 3, code: 'AH1A3', prenom: 'Agent', nom: 'Trois' }), // exclu
+      profil({ id: A2, role: 'agent', prenom: 'Agent', nom: 'Deux' }),                                       // sans quartier : candidat
+      profil({ id: A3, role: 'agent', zone_id: 1, host_id: H1, quartier_id: 3, code: 'AH1A3', prenom: 'Agent', nom: 'Trois' }),
       profil({ id: U1, role: 'beneficiary', code: 'AH1A1Bb1', agent_id: A1, quartier_id: 1, category: 'bb', prenom: 'Pré', nom: 'Bénéf' }),
-      profil({ id: U2, role: 'beneficiary', prenom: 'Autre', nom: 'Bénéf' })                     // proposé
+      profil({ id: U2, role: 'beneficiary', prenom: 'Autre', nom: 'Bénéf' })                                // sans code : candidat
     ],
     zones: [{ id: 1, name: 'Zone 1' }, { id: 2, name: 'Zone 2' }],
     quartiers: [{ id: 1, zone_id: 1, name: 'Quartier Z1-01' }, { id: 3, zone_id: 1, name: 'Quartier Z1-03' }],
@@ -105,71 +105,72 @@ async function options(page) {
   });
 }
 
+/* Ouvre la fenêtre « Remplacer » depuis le compte, vérifie le candidat proposé et l’appel envoyé. */
+async function essai(browser, label, posteId, candidat) {
+  const d = donnees();
+  const ctx = await ouvrir(browser, d);
+  const page = await ctx.newPage();
+  const erreurs = [];
+  page.on('pageerror', function (e) { erreurs.push(String(e && e.message || e)); });
+  await page.goto(BASE + '#/admin/comptes?statut=active', { waitUntil: 'load' });
+  await page.waitForSelector('[data-remplacer-compte="' + posteId + '"]', { timeout: 10000 }).catch(function () {});
+  await page.click('[data-remplacer-compte="' + posteId + '"]');
+  await page.waitForSelector('#rp', { timeout: 5000 }).catch(function () {});
+  const opts = await options(page);
+  check(label + ' : seul le candidat valide est proposé', opts.length === 1 && opts[0] === candidat, opts.join(', '));
+  await page.selectOption('#rp select[name=nouveau]', candidat);
+  await page.click('#rp button[type=submit]');
+  await page.waitForTimeout(500);
+  const rpc = d.rpc.find(function (c) { return c.name === 'admin_remplacer_titulaire'; });
+  check(label + ' : l’appel envoie le poste et le nouveau titulaire',
+    !!rpc && rpc.body.p_poste === posteId && rpc.body.p_nouveau === candidat, JSON.stringify(rpc && rpc.body));
+  check(label + ' : aucune erreur JavaScript', erreurs.length === 0, erreurs.join(' | '));
+  await ctx.close();
+}
+
 (async () => {
   const browser = await chromium.launch();
   try {
-    /* 1) Hôtes */
-    let d = donnees();
-    let ctx = await ouvrir(browser, d);
-    let page = await ctx.newPage();
+    /* 1) Le bouton n’apparaît que sur les comptes qui occupent un poste, à côté de « Message » et « Suspendre » */
+    const d = donnees();
+    const ctx = await ouvrir(browser, d);
+    const page = await ctx.newPage();
     const erreurs = [];
     page.on('pageerror', function (e) { erreurs.push(String(e && e.message || e)); });
-    await page.goto(BASE + '#/admin/hotes', { waitUntil: 'load' });
-    await page.waitForSelector('[data-remplacer]', { timeout: 10000 }).catch(function () {});
-    check('hôtes : un bouton par zone pourvue (zones 1 et 2)', (await page.locator('[data-remplacer]').count()) === 2);
-    await page.click('[data-remplacer="' + H1 + '"]');
-    await page.waitForSelector('#rp', { timeout: 5000 }).catch(function () {});
-    let opts = await options(page);
-    check('hôtes : seul un compte libre est proposé', opts.length === 1 && opts[0] === H2, opts.join(', '));
-    await page.selectOption('#rp select[name=nouveau]', H2);
-    await page.click('#rp button[type=submit]');
-    await page.waitForTimeout(500);
-    const rpcH = d.rpc.find(function (c) { return c.name === 'admin_remplacer_titulaire'; });
-    check('hôtes : l’appel envoie le poste et le nouveau titulaire', !!rpcH && rpcH.body.p_poste === H1 && rpcH.body.p_nouveau === H2, JSON.stringify(rpcH && rpcH.body));
-    check('hôtes : aucune erreur JavaScript', erreurs.length === 0, erreurs.join(' | '));
+    await page.goto(BASE + '#/admin/comptes?statut=active', { waitUntil: 'load' });
+    await page.waitForSelector('[data-remplacer-compte]', { timeout: 10000 }).catch(function () {});
+    const trouves = await page.$$eval('[data-remplacer-compte]', function (els) {
+      return els.map(function (e) { return e.dataset.remplacerCompte; });
+    });
+    const attendus = [H1, H3, A1, A3, U1];
+    const ok = trouves.length === attendus.length && attendus.every(function (id) { return trouves.indexOf(id) !== -1; });
+    check('comptes actifs : « Remplacer » seulement sur les 5 comptes qui occupent un poste', ok, trouves.length + ' bouton(s)');
+    const cellule = await page.locator('[data-remplacer-compte="' + H1 + '"]').evaluate(function (e) {
+      var td = e.closest('td');
+      return td ? td.textContent : e.parentElement.textContent;
+    });
+    check('comptes actifs : « Remplacer » figure à côté de « Message » et « Suspendre »',
+      cellule.indexOf('Message') !== -1 && cellule.indexOf('Suspendre') !== -1);
+    check('comptes actifs : aucune erreur JavaScript', erreurs.length === 0, erreurs.join(' | '));
     await ctx.close();
 
-    /* 2) Agents */
-    d = donnees();
-    ctx = await ouvrir(browser, d);
-    page = await ctx.newPage();
-    const erreursA = [];
-    page.on('pageerror', function (e) { erreursA.push(String(e && e.message || e)); });
-    await page.goto(BASE + '#/admin/agents', { waitUntil: 'load' });
-    await page.waitForSelector('[data-remplacer]', { timeout: 10000 }).catch(function () {});
-    check('agents : un bouton pour chacun des 3 Agents actifs', (await page.locator('[data-remplacer]').count()) === 3);
-    await page.click('[data-remplacer="' + A1 + '"]');
-    await page.waitForSelector('#rp', { timeout: 5000 }).catch(function () {});
-    opts = await options(page);
-    check('agents : seul un compte sans quartier ni code est proposé', opts.length === 1 && opts[0] === A2, opts.join(', '));
-    await page.selectOption('#rp select[name=nouveau]', A2);
-    await page.click('#rp button[type=submit]');
-    await page.waitForTimeout(500);
-    const rpcA = d.rpc.find(function (c) { return c.name === 'admin_remplacer_titulaire'; });
-    check('agents : l’appel envoie le poste et le nouveau titulaire', !!rpcA && rpcA.body.p_poste === A1 && rpcA.body.p_nouveau === A2, JSON.stringify(rpcA && rpcA.body));
-    check('agents : aucune erreur JavaScript', erreursA.length === 0, erreursA.join(' | '));
-    await ctx.close();
+    /* 2) Candidat et appel, pour chaque rôle */
+    await essai(browser, 'hôte', H1, H2);
+    await essai(browser, 'agent', A1, A2);
+    await essai(browser, 'bénéficiaire', U1, U2);
 
-    /* 3) Bénéficiaires */
-    d = donnees();
-    ctx = await ouvrir(browser, d);
-    page = await ctx.newPage();
-    const erreursB = [];
-    page.on('pageerror', function (e) { erreursB.push(String(e && e.message || e)); });
-    await page.goto(BASE + '#/admin/beneficiaires', { waitUntil: 'load' });
-    await page.waitForSelector('[data-remplacer-ben]', { timeout: 10000 }).catch(function () {});
-    check('bénéficiaires : bouton seulement sur la fiche active (pas sur le brouillon)', (await page.locator('[data-remplacer-ben]').count()) === 1);
-    await page.click('[data-remplacer-ben]');
-    await page.waitForSelector('#rp', { timeout: 5000 }).catch(function () {});
-    opts = await options(page);
-    check('bénéficiaires : le titulaire actuel n’est pas proposé', opts.indexOf(U1) === -1 && opts.indexOf(U2) !== -1, opts.join(', '));
-    await page.selectOption('#rp select[name=nouveau]', U2);
-    await page.click('#rp button[type=submit]');
-    await page.waitForTimeout(500);
-    const rpcB = d.rpc.find(function (c) { return c.name === 'admin_remplacer_titulaire'; });
-    check('bénéficiaires : l’appel envoie le titulaire actuel et le nouveau', !!rpcB && rpcB.body.p_poste === U1 && rpcB.body.p_nouveau === U2, JSON.stringify(rpcB && rpcB.body));
-    check('bénéficiaires : aucune erreur JavaScript', erreursB.length === 0, erreursB.join(' | '));
-    await ctx.close();
+    /* 3) Les anciens emplacements (zone, Agent, fiche) ne proposent plus « Remplacer » */
+    const d3 = donnees();
+    const ctx3 = await ouvrir(browser, d3);
+    const p3 = await ctx3.newPage();
+    for (const route of ['#/admin/hotes', '#/admin/agents', '#/admin/beneficiaires']) {
+      await p3.goto(BASE + route, { waitUntil: 'load' });
+      await p3.waitForTimeout(1200);
+      const nb = await p3.locator('[data-remplacer], [data-remplacer-ben]').count();
+      const charge = await p3.locator('[data-suspend], [data-status], [data-assign]').count();
+      check(route + ' : pas de bouton « Remplacer »', nb === 0 && charge > 0, nb + ' bouton(s), ' + charge + ' action(s) présente(s)');
+    }
+    await ctx3.close();
   } finally {
     await browser.close();
   }
