@@ -471,11 +471,16 @@
         { label: 'Agents', cls: 'num', render: function (r) { return r.agents + ' / 10'; } },
         { label: 'Action', cls: 'actions', render: function (r) {
           if (!r.host) return '<a class="btn btn-sm btn-outline" href="#/admin/comptes">Voir les comptes</a>';
-          return r.host.status === 'active'
+          var remplacer = '<button class="btn btn-sm btn-outline" type="button" data-remplacer="' + esc(r.host.id) + '">Remplacer</button> ';
+          return remplacer + (r.host.status === 'active'
             ? '<button class="btn btn-sm btn-outline" type="button" data-suspend="' + esc(r.host.id) + '">Suspendre</button>'
-            : (r.host.status === 'suspended' ? '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(r.host.id) + '">Réactiver</button>' : '—');
+            : (r.host.status === 'suspended' ? '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(r.host.id) + '">Réactiver</button>' : '—'));
         } }
       ], rows, 'Aucune zone.'));
+    act(el, '[data-remplacer]', function (b) {
+      var h = hmap[b.dataset.remplacer];
+      return openRemplacer('host', h.id, 'l’Hôte ' + pname(h));
+    });
     act(el, '[data-suspend]', async function (b) {
       var h = hmap[b.dataset.suspend];
       if (!(await ui.confirm('Suspendre l’Hôte ' + pname(h) + ' ?', 'Suspendre'))) return;
@@ -520,11 +525,17 @@
         } },
         { label: 'Statut', render: function (a) { return ui.badge(a.status); } },
         { label: 'Action', cls: 'actions', render: function (a) {
-          if (a.status === 'active') return '<button class="btn btn-sm btn-outline" type="button" data-suspend="' + esc(a.id) + '">Suspendre</button>';
-          if (a.status === 'suspended') return '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(a.id) + '">Réactiver</button>';
+          var remplacer = a.status === 'active' || a.status === 'suspended'
+            ? '<button class="btn btn-sm btn-outline" type="button" data-remplacer="' + esc(a.id) + '">Remplacer</button> ' : '';
+          if (a.status === 'active') return remplacer + '<button class="btn btn-sm btn-outline" type="button" data-suspend="' + esc(a.id) + '">Suspendre</button>';
+          if (a.status === 'suspended') return remplacer + '<button class="btn btn-sm btn-outline" type="button" data-reactivate="' + esc(a.id) + '">Réactiver</button>';
           return '<a class="btn btn-sm btn-outline" href="#/admin/comptes">Examiner</a>';
         } }
       ], agents, 'Aucun Agent pour le moment.'));
+    act(el, '[data-remplacer]', function (b) {
+      var a = map[b.dataset.remplacer];
+      return openRemplacer('agent', a.id, 'l’Agent ' + pname(a));
+    });
     act(el, '[data-suspend]', async function (b) {
       var a = map[b.dataset.suspend];
       if (!(await ui.confirm('Suspendre l’Agent ' + pname(a) + ' ? Ses bénéficiaires restent rattachés à lui.', 'Suspendre'))) return;
@@ -566,7 +577,9 @@
         { label: 'Action', cls: 'actions', render: function (b) {
           /* Un brouillon sans Agent peut recevoir un Agent ; le bouton disparaît ensuite. */
           var assign = b.status === 'draft' && b.user_id ? '<button class="btn btn-sm btn-primary" type="button" data-assign="' + esc(b.user_id) + '">Affecter un Agent</button> ' : '';
-          return assign + '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(b.id) + '">Statut</button>';
+          /* Une fiche active peut changer de titulaire ; le serveur contrôle le compte choisi. */
+          var remplacer = b.status === 'active' && b.user_id ? '<button class="btn btn-sm btn-outline" type="button" data-remplacer-ben="' + esc(b.id) + '">Remplacer</button> ' : '';
+          return assign + remplacer + '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(b.id) + '">Statut</button>';
         } }
       ], rows, 'Aucun bénéficiaire ne correspond à ces filtres.'));
     bindFilters(el);
@@ -577,6 +590,10 @@
       });
     });
     act(el, '[data-assign]', function (b) { return openAssignAgent(b.dataset.assign); });
+    act(el, '[data-remplacer-ben]', function (b) {
+      var x = map[b.dataset.remplacerBen];
+      return openRemplacer('beneficiary', x.user_id, 'le bénéficiaire ' + bcode(x));
+    });
   }
 
   /* Affectation d’un Agent à un bénéficiaire en brouillon (catégorie non encore choisie). Le serveur contrôle la règle. */
@@ -599,6 +616,36 @@
       m.close();
       refresh();
       return 'Agent affecté.';
+    }, null);
+  }
+
+  /* Remplacement du titulaire d’un poste (Hôte, Agent ou bénéficiaire) : le nouveau titulaire reprend le même poste.
+     Le serveur contrôle les règles (compte actif, même rôle, pas de poste déjà occupé). */
+  async function openRemplacer(role, posteId, libelle) {
+    var r = await DP.api.get('profiles', { select: 'id,prenom,nom,email,code,identifiant,status,zone_id,quartier_id', role: 'eq.' + role, status: 'eq.active', order: 'nom.asc', limit: 500 });
+    var libres = r.filter(function (p) {
+      if (p.id === posteId) return false;
+      if (role === 'host') return !p.zone_id && !p.code;
+      if (role === 'agent') return !p.quartier_id && !p.code;
+      return true;
+    });
+    var titre = { host: 'Hôte', agent: 'Agent', beneficiary: 'bénéficiaire' }[role];
+    var quoi = { host: 'la zone et les codes', agent: 'le quartier, les codes et les bénéficiaires', beneficiary: 'la fiche, la catégorie, le code, l’Agent et les projets' }[role];
+    var m = ui.modal('Remplacer ' + libelle,
+      '<p class="small muted">Le nouveau titulaire reprend le même poste : ' + quoi + ' restent. L’ancien compte est suspendu.</p>' +
+      (libres.length ? '' : ui.alert('warn', '<strong>Aucun compte disponible.</strong> Le nouveau titulaire doit être un compte actif du même rôle, sans poste déjà occupé.')) +
+      '<form class="form" id="rp">' +
+      ui.field({ name: 'nouveau', label: 'Nouveau ' + titre, type: 'select', options: libres.map(function (p) {
+        return [p.id, pname(p) + (p.code ? ' (' + p.code + ')' : '') + (p.identifiant ? ' — ' + p.identifiant : '')];
+      }), placeholder: 'Choisir un compte actif', required: true, dataType: 'nullable' }) +
+      '<div class="form-actions"><button class="btn btn-primary" type="submit">Remplacer</button></div></form>');
+    var form = m.el.querySelector('#rp');
+    ui.bindForm(form, async function (d) {
+      if (!d.nouveau) throw new Error('Choisissez le nouveau titulaire.');
+      await DP.api.rpc('admin_remplacer_titulaire', { p_poste: posteId, p_nouveau: d.nouveau });
+      m.close();
+      refresh();
+      return 'Titulaire remplacé. L’ancien compte est suspendu.';
     }, null);
   }
 
