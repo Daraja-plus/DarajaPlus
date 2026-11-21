@@ -1,8 +1,8 @@
-/* Test du bouton « Remplacer » sur la page Comptes à valider (aucun appel réel à Supabase) :
-   1) le bouton n’apparaît que sur les comptes qui occupent un poste (Hôte avec zone, Agent avec quartier,
-      bénéficiaire avec code), à côté de « Message » et « Suspendre » ;
-   2) pour chaque rôle, la fenêtre ne propose que le candidat valide, et l’appel envoyé au serveur est correct ;
-   3) les listes Hôtes, Agents et Bénéficiaires n’ont plus de bouton « Remplacer ».
+/* Test du bouton « Remplacer » (aucun appel réel à Supabase) :
+   1) Comptes à valider > Actifs : le bouton n’apparaît que sur les comptes qui occupent un poste, à côté de « Message » et « Suspendre » ;
+   2) Affectations > Tous les comptes actifs : même règle, à côté de « Modifier » et « Message » ;
+   3) pour chaque rôle, la fenêtre ne propose que le candidat valide, et l’appel envoyé au serveur est correct ;
+   4) les listes Hôtes, Agents et Bénéficiaires n’ont plus de bouton « Remplacer ».
    Usage :
      1) servir le dossier :  python3 -m http.server 8765 --bind 127.0.0.1   (depuis le dossier DarajaPlus)
      2) lancer le test   :  node tests/remplacer.js        (variable BASE pour une autre adresse)
@@ -22,6 +22,9 @@ const A3 = '88888888-8888-4888-8888-888888888888';
 const U1 = '22222222-2222-4222-8222-222222222222';
 const U2 = '99999999-9999-4999-8999-999999999999';
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': 'GET,POST,PATCH,DELETE,OPTIONS' };
+
+const COMPTES_ACTIFS = '#/admin/comptes?statut=active';
+const AFFECTATIONS_TOUS = '#/admin/affectations?vue=tous';
 
 let failures = 0;
 function check(label, ok, extra) {
@@ -105,14 +108,37 @@ async function options(page) {
   });
 }
 
-/* Ouvre la fenêtre « Remplacer » depuis le compte, vérifie le candidat proposé et l’appel envoyé. */
-async function essai(browser, label, posteId, candidat) {
+/* Vérifie quels comptes ont le bouton, et ce qui figure dans leur cellule d’actions. */
+async function presence(browser, label, route, attendus, mots) {
   const d = donnees();
   const ctx = await ouvrir(browser, d);
   const page = await ctx.newPage();
   const erreurs = [];
   page.on('pageerror', function (e) { erreurs.push(String(e && e.message || e)); });
-  await page.goto(BASE + '#/admin/comptes?statut=active', { waitUntil: 'load' });
+  await page.goto(BASE + route, { waitUntil: 'load' });
+  await page.waitForSelector('[data-remplacer-compte]', { timeout: 10000 }).catch(function () {});
+  const trouves = await page.$$eval('[data-remplacer-compte]', function (els) {
+    return els.map(function (e) { return e.dataset.remplacerCompte; });
+  });
+  const ok = trouves.length === attendus.length && attendus.every(function (id) { return trouves.indexOf(id) !== -1; });
+  check(label + ' : « Remplacer » seulement sur les ' + attendus.length + ' comptes qui occupent un poste', ok, trouves.length + ' bouton(s)');
+  const cellule = await page.locator('[data-remplacer-compte="' + H1 + '"]').evaluate(function (e) {
+    var td = e.closest('td');
+    return td ? td.textContent : e.parentElement.textContent;
+  });
+  check(label + ' : « Remplacer » figure à côté de ' + mots.join(' et '), mots.every(function (m) { return cellule.indexOf(m) !== -1; }));
+  check(label + ' : aucune erreur JavaScript', erreurs.length === 0, erreurs.join(' | '));
+  await ctx.close();
+}
+
+/* Ouvre la fenêtre « Remplacer » depuis le compte, vérifie le candidat proposé et l’appel envoyé. */
+async function essai(browser, label, route, posteId, candidat) {
+  const d = donnees();
+  const ctx = await ouvrir(browser, d);
+  const page = await ctx.newPage();
+  const erreurs = [];
+  page.on('pageerror', function (e) { erreurs.push(String(e && e.message || e)); });
+  await page.goto(BASE + route, { waitUntil: 'load' });
   await page.waitForSelector('[data-remplacer-compte="' + posteId + '"]', { timeout: 10000 }).catch(function () {});
   await page.click('[data-remplacer-compte="' + posteId + '"]');
   await page.waitForSelector('#rp', { timeout: 5000 }).catch(function () {});
@@ -131,46 +157,30 @@ async function essai(browser, label, posteId, candidat) {
 (async () => {
   const browser = await chromium.launch();
   try {
-    /* 1) Le bouton n’apparaît que sur les comptes qui occupent un poste, à côté de « Message » et « Suspendre » */
-    const d = donnees();
-    const ctx = await ouvrir(browser, d);
-    const page = await ctx.newPage();
-    const erreurs = [];
-    page.on('pageerror', function (e) { erreurs.push(String(e && e.message || e)); });
-    await page.goto(BASE + '#/admin/comptes?statut=active', { waitUntil: 'load' });
-    await page.waitForSelector('[data-remplacer-compte]', { timeout: 10000 }).catch(function () {});
-    const trouves = await page.$$eval('[data-remplacer-compte]', function (els) {
-      return els.map(function (e) { return e.dataset.remplacerCompte; });
-    });
     const attendus = [H1, H3, A1, A3, U1];
-    const ok = trouves.length === attendus.length && attendus.every(function (id) { return trouves.indexOf(id) !== -1; });
-    check('comptes actifs : « Remplacer » seulement sur les 5 comptes qui occupent un poste', ok, trouves.length + ' bouton(s)');
-    const cellule = await page.locator('[data-remplacer-compte="' + H1 + '"]').evaluate(function (e) {
-      var td = e.closest('td');
-      return td ? td.textContent : e.parentElement.textContent;
-    });
-    check('comptes actifs : « Remplacer » figure à côté de « Message » et « Suspendre »',
-      cellule.indexOf('Message') !== -1 && cellule.indexOf('Suspendre') !== -1);
-    check('comptes actifs : aucune erreur JavaScript', erreurs.length === 0, erreurs.join(' | '));
-    await ctx.close();
 
-    /* 2) Candidat et appel, pour chaque rôle */
-    await essai(browser, 'hôte', H1, H2);
-    await essai(browser, 'agent', A1, A2);
-    await essai(browser, 'bénéficiaire', U1, U2);
+    /* 1) et 2) : présence du bouton sur les deux pages */
+    await presence(browser, 'comptes actifs', COMPTES_ACTIFS, attendus, ['Message', 'Suspendre']);
+    await presence(browser, 'affectations (tous les comptes actifs)', AFFECTATIONS_TOUS, attendus, ['Modifier', 'Message']);
 
-    /* 3) Les anciens emplacements (zone, Agent, fiche) ne proposent plus « Remplacer » */
-    const d3 = donnees();
-    const ctx3 = await ouvrir(browser, d3);
-    const p3 = await ctx3.newPage();
+    /* 3) candidat et appel, pour chaque rôle */
+    await essai(browser, 'comptes actifs : hôte', COMPTES_ACTIFS, H1, H2);
+    await essai(browser, 'comptes actifs : agent', COMPTES_ACTIFS, A1, A2);
+    await essai(browser, 'comptes actifs : bénéficiaire', COMPTES_ACTIFS, U1, U2);
+    await essai(browser, 'affectations : hôte', AFFECTATIONS_TOUS, H1, H2);
+
+    /* 4) Les anciens emplacements (zone, Agent, fiche) ne proposent plus « Remplacer » */
+    const d4 = donnees();
+    const ctx4 = await ouvrir(browser, d4);
+    const p4 = await ctx4.newPage();
     for (const route of ['#/admin/hotes', '#/admin/agents', '#/admin/beneficiaires']) {
-      await p3.goto(BASE + route, { waitUntil: 'load' });
-      await p3.waitForTimeout(1200);
-      const nb = await p3.locator('[data-remplacer], [data-remplacer-ben]').count();
-      const charge = await p3.locator('[data-suspend], [data-status], [data-assign]').count();
+      await p4.goto(BASE + route, { waitUntil: 'load' });
+      await p4.waitForTimeout(1200);
+      const nb = await p4.locator('[data-remplacer], [data-remplacer-ben]').count();
+      const charge = await p4.locator('[data-suspend], [data-status], [data-assign]').count();
       check(route + ' : pas de bouton « Remplacer »', nb === 0 && charge > 0, nb + ' bouton(s), ' + charge + ' action(s) présente(s)');
     }
-    await ctx3.close();
+    await ctx4.close();
   } finally {
     await browser.close();
   }

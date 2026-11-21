@@ -196,6 +196,9 @@
     if (p.role === 'beneficiary') return !!p.code;
     return false;
   }
+  function libelleRemplacer(p) {
+    return p.role === 'host' ? 'l’Hôte ' + pname(p) : p.role === 'agent' ? 'l’Agent ' + pname(p) : 'le bénéficiaire ' + pname(p);
+  }
   function actionsForAccount(p) {
     var remplacer = peutRemplacer(p) ? ' <button class="btn btn-sm btn-outline" type="button" data-remplacer-compte="' + esc(p.id) + '">Remplacer</button>' : '';
     return actionsStatut(p) + remplacer + ' <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Envoyer un message privé à ' + esc(pname(p)) + '">Message</a>';
@@ -330,8 +333,7 @@
     act(el, '[data-review]', function (b) { return openReview(map[b.dataset.review], lk); });
     act(el, '[data-remplacer-compte]', function (b) {
       var p = map[b.dataset.remplacerCompte];
-      var libelle = p.role === 'host' ? 'l’Hôte ' + pname(p) : p.role === 'agent' ? 'l’Agent ' + pname(p) : 'le bénéficiaire ' + pname(p);
-      return openRemplacer(p.role, p.id, libelle);
+      return openRemplacer(p.role, p.id, libelleRemplacer(p));
     });
     var formRecherche = el.querySelector('#recherche-comptes');
     if (formRecherche) formRecherche.addEventListener('submit', function (e) {
@@ -1383,7 +1385,10 @@
       { label: 'Situation', render: function (p) { var s = situation(p); return s ? esc(s) : '<span class="badge badge-warn">En attente de catégorie</span>'; } },
       { label: 'Code', render: function (p) { return esc(p.code || (data.ficheOf[p.id] && data.ficheOf[p.id].code) || '—'); } },
       { label: 'Rattaché à', render: function (p) { return esc(rattachement(p)); } },
-      { label: 'Action', cls: 'actions', render: function (p) { return '<button class="btn btn-sm btn-outline" type="button" data-affecter="' + esc(p.id) + '">Modifier</button> <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Envoyer un message privé à ' + esc(pname(p)) + '">Message</a>'; } }
+      { label: 'Action', cls: 'actions', render: function (p) {
+        var remplacer = peutRemplacer(p) ? ' <button class="btn btn-sm btn-outline" type="button" data-remplacer-compte="' + esc(p.id) + '">Remplacer</button>' : '';
+        return '<button class="btn btn-sm btn-outline" type="button" data-affecter="' + esc(p.id) + '">Modifier</button>' + remplacer + ' <a class="btn btn-sm btn-outline" href="#/admin/messages/' + esc(p.id) + '" aria-label="Envoyer un message privé à ' + esc(pname(p)) + '">Message</a>';
+      } }
     ] : [
       nom,
       { label: 'Inscrit le', render: function (p) { return ui.date(p.created_at); } },
@@ -1402,6 +1407,10 @@
       ui.card(null, ui.table(colonnes, rows, vue === 'tous' ? 'Aucun compte actif.' : 'Aucun bénéficiaire en attente d’affectation.'));
 
     act(el, '[data-affecter]', function (b) { return openAffectation(par[b.dataset.affecter], data, lk); });
+    act(el, '[data-remplacer-compte]', function (b) {
+      var p = par[b.dataset.remplacerCompte];
+      return openRemplacer(p.role, p.id, libelleRemplacer(p));
+    });
   }
 
   /* ---------- Routes ---------- */
