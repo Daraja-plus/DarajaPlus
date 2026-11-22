@@ -69,7 +69,7 @@
     var x = it.row;
     if (it.kind === 'annonce') {
       var body = x.body || '';
-      return '<li class="notif feed-item"><div class="notif-main">' +
+      return '<li class="notif feed-item" data-kind="annonce" data-pub="' + esc(x.id) + '"><div class="notif-main">' +
         '<div class="small muted">Annonce · ' + esc(DP.labels.audience[x.audience] || '') + ' · ' + ui.dateTime(x.created_at) + '</div>' +
         '<strong>' + esc(x.title) + '</strong>' +
         DP.photo.picture('annonces', x.photo_path, 'Photo de l’annonce', 'ann-photo') +
@@ -77,7 +77,7 @@
     }
     var o = x;
     var desc = o.description || '';
-    return '<li class="notif feed-item"><div class="notif-main">' +
+    return '<li class="notif feed-item" data-kind="offre" data-pub="' + esc(o.id) + '"><div class="notif-main">' +
       '<div class="small muted">Opportunité · ' + esc(OFFER_TYPE[o.offer_type] || o.offer_type || '') + ' · ' +
       esc(author(o, partners)) + ' · ' + ui.dateTime(o.created_at) + '</div>' +
       '<strong>' + esc(o.title) + '</strong>' +
@@ -111,6 +111,7 @@
     slot.innerHTML = html;
     el.appendChild(slot);
     DP.photo.hydrate(slot);
+    suivreVues(slot);
   }
 
   /* Page « Actualités » : toutes les annonces et opportunités, avec un filtre (Tout, Annonces, Opportunités). */
@@ -135,6 +136,93 @@
     el.innerHTML = ui.header('Actualités', 'Annonces de la plateforme et opportunités publiées, les plus récentes d’abord. Une opportunité n’est pas une promesse de financement.') +
       tabs + ui.card(null, listHtml(items, d.partners, true, 'Aucune actualité pour le moment.'));
     DP.photo.hydrate(el);
+    suivreVues(el);
+  }
+
+  /* Vues des publications. Une publication compte une vue quand au moins la moitié de sa carte reste affichée
+     une seconde. Une personne ne compte qu'une fois par publication, et les envois sont regroupés.
+     L'auteur et l'Administrateur ne sont pas comptés : la base l'applique aussi. */
+  var VUE_DELAI = 1000;
+  var ENVOI_DELAI = 2000;
+  var attente = { annonce: [], offre: [] };
+  var envoyees = { annonce: {}, offre: {} };
+  var envoiPrevu = false;
+
+  async function envoyerVues() {
+    envoiPrevu = false;
+    var kinds = ['annonce', 'offre'];
+    for (var i = 0; i < kinds.length; i++) {
+      var kind = kinds[i];
+      var ids = attente[kind];
+      attente[kind] = [];
+      if (!ids.length) continue;
+      try {
+        await DP.api.rpc('enregistrer_vues', { p_kind: kind, p_ids: ids });
+      } catch (e) {
+        /* Hors connexion : la publication pourra être comptée au prochain affichage. */
+        ids.forEach(function (id) { delete envoyees[kind][id]; });
+      }
+    }
+  }
+
+  function marquerVue(carte) {
+    var kind = carte.getAttribute('data-kind');
+    var id = carte.getAttribute('data-pub');
+    if (!envoyees[kind] || !id || envoyees[kind][id]) return;
+    envoyees[kind][id] = true;
+    attente[kind].push(id);
+    if (!envoiPrevu) { envoiPrevu = true; setTimeout(envoyerVues, ENVOI_DELAI); }
+  }
+
+  function suivreVues(racine) {
+    if (!racine || !DP.api.uid) return;
+    var cartes = racine.querySelectorAll('[data-pub]');
+    if (!cartes.length) return;
+    if (!('IntersectionObserver' in window)) {
+      Array.prototype.forEach.call(cartes, function (c) { marquerVue(c); });
+      return;
+    }
+    var minuteries = {};
+    var observateur = new IntersectionObserver(function (entrees) {
+      entrees.forEach(function (e) {
+        var carte = e.target;
+        var cle = carte.getAttribute('data-kind') + ':' + carte.getAttribute('data-pub');
+        if (e.isIntersecting && e.intersectionRatio >= 0.5) {
+          if (!minuteries[cle]) {
+            minuteries[cle] = setTimeout(function () {
+              delete minuteries[cle];
+              observateur.unobserve(carte);
+              marquerVue(carte);
+            }, VUE_DELAI);
+          }
+        } else if (minuteries[cle]) {
+          clearTimeout(minuteries[cle]);
+          delete minuteries[cle];
+        }
+      });
+    }, { threshold: [0, 0.5] });
+    Array.prototype.forEach.call(cartes, function (c) { observateur.observe(c); });
+  }
+
+  /* Nombre de vues par publication, pour les publications dont ce compte peut voir les vues. */
+  async function compterVues(kind) {
+    var rows = await DP.api.rpc('compter_vues', { p_kind: kind });
+    var map = {};
+    (Array.isArray(rows) ? rows : []).forEach(function (r) { map[r.publication_id] = Number(r.vues); });
+    return map;
+  }
+
+  /* Cellule « Vues » d'un tableau. Administrateur (attrAdmin renseigné) : le nombre et le réglage
+     « l'auteur voit les vues ». Auteur : le nombre si l'Administrateur l'a autorisé, sinon « Non communiqué ». */
+  function celluleVues(map, id, flag, attrAdmin) {
+    var n = map[id];
+    if (attrAdmin) {
+      return '<strong>' + (n === undefined ? 0 : n) + '</strong>' +
+        '<div class="small muted">' + (flag ? 'L’auteur voit les vues' : 'L’auteur ne voit pas les vues') + '</div>' +
+        '<button class="btn btn-sm btn-outline" type="button" ' + attrAdmin + '="' + esc(id) + '" data-to="' + (flag ? 'false' : 'true') + '">' +
+        (flag ? 'Retirer à l’auteur' : 'Autoriser l’auteur') + '</button>';
+    }
+    return n === undefined ? '<span class="small muted">Non communiqué</span>' : '<strong>' + n + '</strong>';
   }
 
   DP.register([
@@ -142,4 +230,5 @@
   ]);
 
   DP.feed = { mount: mount, load: load };
+  DP.vues = { suivre: suivreVues, compter: compterVues, cellule: celluleVues };
 })();

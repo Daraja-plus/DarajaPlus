@@ -58,8 +58,9 @@
       running: 'En cours', visible: 'Visible', confirmed: 'Confirmé', validated: 'Validé'
     },
     audience: {
-      all: 'Toute la plateforme', zone: 'Ma zone', agent_beneficiaries: 'Mes bénéficiaires'
-    }
+      all: 'Toute la plateforme', zone: 'Ma zone', quartier: 'Mon quartier', rue: 'Ma rue', agent_beneficiaries: 'Mes bénéficiaires'
+    },
+    rue: { R1: 'R1 — entreprises moyennes (Gamma)', R2: 'R2 — petites entreprises (Bêta)', R3: 'R3 — microentreprises (Alpha)' }
   };
 
   var tones = {

@@ -191,6 +191,7 @@
     var p = await myPartner();
     if (!p) { el.innerHTML = noPartnerHtml('Mes offres'); return; }
     var offers = await DP.api.get('offers', { select: '*', author_id: 'eq.' + DP.api.uid, order: 'created_at.desc', limit: 200 });
+    var vues = await DP.vues.compter('offre');
 
     el.innerHTML = DP.ui.header('Mes offres et programmes', PUBLISH_NOTE) +
       DP.ui.card('Nouvelle offre', '<form class="form" id="f-offer">' +
@@ -218,7 +219,8 @@
           return DP.ui.money(o.amount_min, o.currency) + ' – ' + DP.ui.money(o.amount_max, o.currency);
         } },
         { label: 'Échéance', render: function (o) { return DP.ui.date(o.deadline); } },
-        { label: 'Statut', render: function (o) { return DP.ui.badge(o.status); } }
+        { label: 'Statut', render: function (o) { return DP.ui.badge(o.status); } },
+        { label: 'Vues', cls: 'num', render: function (o) { return DP.vues.cellule(vues, o.id, o.views_for_author, null); } }
       ], offers, 'Aucune offre pour le moment.'));
 
     DP.ui.bindForm(el.querySelector('#f-offer'), async function (d) {

@@ -640,12 +640,12 @@
     var partners = byId(await DP.api.get('partners', { select: 'id,legal_name', id: inq(offers.map(function (o) { return o.partner_id; })) || 'is.null' }));
     el.innerHTML = ui.header('Opportunités', 'Programmes, appels à projets et offres publiés sur DarajaPlus. Une opportunité n’est pas une promesse de financement.') +
       (anns.length ? ui.card('Annonces', '<ul class="notif-list">' + anns.map(function (a) {
-        return '<li class="notif"><div class="notif-main"><strong>' + esc(a.title) + '</strong>' + DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-photo') + '<div class="small">' + esc(a.body) + '</div>' +
+        return '<li class="notif" data-kind="annonce" data-pub="' + esc(a.id) + '"><div class="notif-main"><strong>' + esc(a.title) + '</strong>' + DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-photo') + '<div class="small">' + esc(a.body) + '</div>' +
           '<div class="small muted">' + ui.dateTime(a.created_at) + '</div></div></li>';
       }).join('') + '</ul>') : '') +
       ui.card('Opportunités pour ma catégorie', offers.length ? '<div class="grid-2">' + offers.map(function (o) {
         var by = o.author_kind === 'partner' ? (partners[o.partner_id] ? partners[o.partner_id].legal_name : 'Partenaire validé') : 'Publié par un Agent DarajaPlus';
-        return '<article class="card"><div class="card-body">' +
+        return '<article class="card" data-kind="offre" data-pub="' + esc(o.id) + '"><div class="card-body">' +
           '<h3 style="margin:0 0 .25rem">' + esc(o.title) + '</h3>' +
           '<div class="small muted">' + esc(OFFER_LABEL[o.offer_type] || o.offer_type || '') + ' · ' + esc(by) + '</div>' +
           '<p>' + esc(short(o.description, 260)) + '</p>' +
@@ -656,6 +656,7 @@
           '</dl></div></article>';
       }).join('') + '</div>' : ui.empty('Aucune opportunité publiée pour votre catégorie pour le moment.'));
     DP.photo.hydrate(el);
+    if (DP.vues) DP.vues.suivre(el);
   }
   var OFFER_LABEL = {
     programme_accompagnement: 'Programme d’accompagnement', appel_projets: 'Appel à projets',

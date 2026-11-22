@@ -4,7 +4,9 @@
    - le bénéficiaire ne voit que les offres de sa catégorie (Bb) et celles pour toutes les catégories ;
    - le partenaire voit toutes les offres publiées ;
    - les filtres de la page (Tout, Annonces, Opportunités) fonctionnent ;
-   - le menu contient « Actualités » ; aucune exception JavaScript.
+   - le menu contient « Actualités » ; aucune exception JavaScript ;
+   - chaque publication affichée est comptée une seule fois (appel « enregistrer_vues »), et jamais
+     une publication masquée, en brouillon ou d’une autre catégorie.
 
    Usage :
      1) servir le dossier :  python3 -m http.server 8765 --directory /chemin/vers/DarajaPlus
@@ -73,6 +75,7 @@ async function openRole(browser, role) {
   }, session);
 
   const requests = [];
+  const rpcs = [];
   await context.route(SB + '/**', async (route) => {
     const req = route.request();
     if (req.method() === 'OPTIONS') return route.fulfill({ status: 204, headers: CORS, body: '' });
@@ -80,7 +83,12 @@ async function openRole(browser, role) {
     const p = url.pathname;
     let body = [];
     if (p === '/auth/v1/user') body = { id: PROFILES[role].id, email: PROFILES[role].email, aud: 'authenticated' };
-    else if (p.indexOf('/rest/v1/rpc/') === 0) body = {};
+    else if (p.indexOf('/rest/v1/rpc/') === 0) {
+      let args = null;
+      try { args = req.postDataJSON(); } catch (e) { /* pas de corps */ }
+      rpcs.push({ name: p.slice('/rest/v1/rpc/'.length), args: args });
+      body = {};
+    }
     else if (p.indexOf('/rest/v1/') === 0) {
       const table = p.slice('/rest/v1/'.length);
       if (table === 'profiles') body = [PROFILES[role]];
@@ -97,7 +105,7 @@ async function openRole(browser, role) {
   page.on('pageerror', (e) => problems.push(e.message));
   await page.goto(BASE + '#/', { waitUntil: 'load' });
   await page.waitForTimeout(300);
-  return { context, page, requests, problems };
+  return { context, page, requests, rpcs, problems };
 }
 
 async function goTo(page, hash, waitText) {
@@ -139,6 +147,25 @@ async function testBeneficiary(browser) {
   const offQuery = s.requests.filter(function (r) { return r.table === 'offers'; });
   check(offQuery.length > 0 && offQuery.every(function (r) { return r.query.indexOf('status=eq.published') !== -1; }),
     'requête offres : limitée aux offres « published »');
+
+  /* Vues : chaque publication affichée à l’écran est comptée une fois, jamais une publication masquée,
+     en brouillon ou d’une autre catégorie. On affiche la page complète, puis on descend en bas de page. */
+  await goTo(s.page, '#/actualites', 'Bienvenue');
+  await s.page.waitForTimeout(3500);
+  await s.page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await s.page.waitForTimeout(3500);
+  const envois = s.rpcs.filter(function (r) { return r.name === 'enregistrer_vues' && r.args; });
+  const idsDe = function (kind) {
+    return [].concat.apply([], envois.filter(function (r) { return r.args.p_kind === kind; }).map(function (r) { return r.args.p_ids; }));
+  };
+  const vuesAnn = idsDe('annonce');
+  const vuesOff = idsDe('offre');
+  const toutes = vuesAnn.concat(vuesOff);
+  check(vuesAnn.indexOf('an-1') !== -1, 'vues : l’annonce affichée est comptée');
+  check(vuesOff.indexOf('o-all') !== -1, 'vues : l’offre affichée en bas de page est comptée');
+  check(toutes.length === new Set(toutes).size, 'vues : une seule vue par publication (pas de doublon)');
+  check(toutes.indexOf('o-ba') === -1 && toutes.indexOf('an-2') === -1 && toutes.indexOf('o-draft') === -1,
+    'vues : offre Ba, annonce masquée et brouillon jamais comptées');
 
   check(s.problems.length === 0, 'aucune exception JavaScript' + (s.problems.length ? ' : ' + s.problems.join(' | ') : ''));
   await s.context.close();

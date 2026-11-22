@@ -244,24 +244,46 @@
 
   async function renderHostAnnouncements(el) {
     var me = DP.app.profile;
-    var rows = await DP.api.get('announcements', { select: '*', author_id: 'eq.' + DP.api.uid, order: 'created_at.desc', limit: 100 });
-    el.innerHTML = ui.header('Annonces de zone', 'Messages destinés aux Agents et bénéficiaires de votre zone.') +
+    var r = await Promise.all([
+      DP.api.get('announcements', { select: '*', author_id: 'eq.' + DP.api.uid, order: 'created_at.desc', limit: 100 }),
+      DP.api.get('quartiers', { select: 'id,name', zone_id: 'eq.' + me.zone_id, order: 'id.asc' }),
+      DP.vues.compter('annonce')
+    ]);
+    var rows = r[0], quartiers = r[1], vues = r[2], qmap = byId(quartiers);
+    el.innerHTML = ui.header('Annonces de zone', 'Messages destinés à toute votre zone, à un quartier de votre zone, ou à une rue d’un quartier de votre zone.') +
       '<div class="grid-2">' +
       ui.card('Nouvelle annonce de zone', '<form class="form" id="f-ann">' +
         ui.field({ name: 'title', label: 'Titre', required: true, full: true }) +
-        ui.field({ name: 'body', label: 'Message', type: 'textarea', rows: 5, required: true, full: true, hint: 'Visible par les bénéficiaires de la zone. Pas de données personnelles.' }) +
+        ui.field({ name: 'body', label: 'Message', type: 'textarea', rows: 5, required: true, full: true, hint: 'Pas de données personnelles.' }) +
+        ui.field({ name: 'audience', label: 'Destinataires', type: 'select', required: true, options: [['zone', 'Toute ma zone'], ['quartier', 'Un quartier de ma zone'], ['rue', 'Une rue d’un quartier de ma zone']] }) +
+        ui.field({ name: 'quartier_id', label: 'Quartier (si « Un quartier » ou « Une rue »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: quartiers.map(function (q) { return [q.id, q.name]; }) }) +
+        ui.field({ name: 'rue', label: 'Rue (si « Une rue d’un quartier »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: [['R1', DP.labels.rue.R1], ['R2', DP.labels.rue.R2], ['R3', DP.labels.rue.R3]] }) +
         DP.photo.html({ mode: 'form', compact: true, label: 'Photo (facultatif — JPG, PNG ou WebP, 3 Mo maximum)' }) +
         '<div class="form-actions"><button class="btn btn-primary" type="submit">Publier pour ma zone</button></div></form>') +
       ui.card('Mes annonces', ui.table([
         { label: 'Annonce', render: function (a) { return DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-thumb') + '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
         { label: 'Date', render: function (a) { return ui.date(a.created_at); } },
-        { label: 'Statut', render: function (a) { return ui.badge(a.status === 'visible' ? 'published' : 'hidden'); } }
+        { label: 'Statut', render: function (a) { return ui.badge(a.status === 'visible' ? 'published' : 'hidden'); } },
+        { label: 'Destinataires', render: function (a) {
+          var q = qmap[a.quartier_id] ? qmap[a.quartier_id].name : '';
+          if (a.audience === 'zone') return 'Ma zone';
+          if (a.audience === 'quartier') return 'Quartier ' + esc(q);
+          return 'Rue ' + esc(a.rue || '') + ' · ' + esc(q);
+        } },
+        { label: 'Vues', cls: 'num', render: function (a) { return DP.vues.cellule(vues, a.id, a.views_for_author, null); } }
       ], rows, 'Aucune annonce publiée.')) + '</div>';
     DP.photo.hydrate(el);
     var photo = DP.photo.bind(el.querySelector('#f-ann'), { mode: 'form' });
     ui.bindForm(el.querySelector('#f-ann'), async function (d) {
+      if ((d.audience === 'quartier' || d.audience === 'rue') && !d.quartier_id) throw new Error('Choisissez le quartier destinataire.');
+      if (d.audience === 'rue' && !d.rue) throw new Error('Choisissez la rue (R1, R2 ou R3).');
       await DP.photo.sendWith(photo, 'annonces', 'annonce-', function (chemin) {
-        return DP.api.insert('announcements', { author_id: DP.api.uid, audience: 'zone', zone_id: me.zone_id, title: d.title, body: d.body, status: 'visible', photo_path: chemin });
+        return DP.api.insert('announcements', {
+          author_id: DP.api.uid, audience: d.audience, title: d.title, body: d.body, status: 'visible', photo_path: chemin,
+          zone_id: d.audience === 'zone' ? me.zone_id : null,
+          quartier_id: (d.audience === 'quartier' || d.audience === 'rue') ? Number(d.quartier_id) : null,
+          rue: d.audience === 'rue' ? d.rue : null
+        });
       });
       refresh();
       return 'Annonce publiée pour votre zone.';
@@ -474,9 +496,10 @@
     var me = DP.app.profile;
     var r = await Promise.all([
       DP.api.rpc('agent_quota', {}),
-      DP.api.get('offers', { select: '*', author_id: 'eq.' + me.id, author_kind: 'eq.agent', order: 'created_at.desc', limit: 200 })
+      DP.api.get('offers', { select: '*', author_id: 'eq.' + me.id, author_kind: 'eq.agent', order: 'created_at.desc', limit: 200 }),
+      DP.vues.compter('offre')
     ]);
-    var q = r[0], rows = r[1];
+    var q = r[0], rows = r[1], vues = r[2];
     el.innerHTML = ui.header('Publications', 'Vous pouvez publier des opportunités. Au-delà du quota gratuit du mois, la publication passe en attente de paiement.') +
       ui.alert(q.free_offers_used >= q.free_offers_quota ? 'warn' : 'info',
         'Publications gratuites ce mois-ci : <strong>' + q.free_offers_used + ' / ' + q.free_offers_quota + '</strong>. Les tarifs au-delà ne sont pas encore validés.') +
@@ -485,6 +508,8 @@
         ui.field({ name: 'title', label: 'Titre', required: true, full: true }) +
         '<div class="field-row">' + ui.field({ name: 'offer_type', label: 'Type', type: 'select', options: OFFER_TYPES, required: true }) +
         ui.field({ name: 'target_category', label: 'Public visé', type: 'select', options: [['all', 'Toutes catégories']].concat(CAT), value: 'all' }) + '</div>' +
+        '<div class="field-row">' + ui.field({ name: 'audience', label: 'Destinataires', type: 'select', required: true, value: 'quartier', options: [['quartier', 'Tout mon quartier'], ['rue', 'Une rue de mon quartier']] }) +
+        ui.field({ name: 'rue', label: 'Rue (si « Une rue de mon quartier »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: [['R1', DP.labels.rue.R1], ['R2', DP.labels.rue.R2], ['R3', DP.labels.rue.R3]] }) + '</div>' +
         ui.field({ name: 'sector', label: 'Secteur', dataType: 'nullable' }) +
         ui.field({ name: 'description', label: 'Description', type: 'textarea', rows: 3, full: true, dataType: 'nullable' }) +
         '<div class="field-row">' + ui.field({ name: 'amount_min', label: 'Montant minimum', type: 'number', dataType: 'nullable', step: 'any', min: 0 }) +
@@ -495,14 +520,18 @@
       ui.card('Mes publications', ui.table([
         { label: 'Titre', render: function (o) { return '<strong>' + esc(o.title) + '</strong><div class="small muted">' + esc(OFFER_TYPE_LABEL[o.offer_type] || '') + '</div>'; } },
         { label: 'Échéance', render: function (o) { return ui.date(o.deadline); } },
-        { label: 'Statut', render: function (o) { return ui.badge(o.status); } }
+        { label: 'Statut', render: function (o) { return ui.badge(o.status); } },
+        { label: 'Destinataires', render: function (o) { return o.audience === 'rue' ? 'Rue ' + esc(o.rue || '') : 'Mon quartier'; } },
+        { label: 'Vues', cls: 'num', render: function (o) { return DP.vues.cellule(vues, o.id, o.views_for_author, null); } }
       ], rows, 'Aucune publication pour le moment.')) + '</div>';
 
     ui.bindForm(el.querySelector('#f-offer'), async function (d) {
+      if (d.audience === 'rue' && !d.rue) throw new Error('Choisissez la rue (R1, R2 ou R3).');
       var res = await DP.api.rpc('agent_publish_offer', {
         p_title: d.title, p_offer_type: d.offer_type, p_description: d.description || null,
         p_target_category: d.target_category, p_sector: d.sector || null,
-        p_amount_min: d.amount_min, p_amount_max: d.amount_max, p_currency: d.currency, p_deadline: d.deadline || null
+        p_amount_min: d.amount_min, p_amount_max: d.amount_max, p_currency: d.currency, p_deadline: d.deadline || null,
+        p_audience: d.audience, p_rue: d.audience === 'rue' ? d.rue : null
       });
       refresh();
       return res && res.paid ? 'Publication enregistrée : en attente de paiement (quota gratuit atteint).' : 'Publication enregistrée.';
@@ -577,23 +606,39 @@
 
   async function renderAgentAnnouncements(el) {
     var me = DP.app.profile;
-    var rows = await DP.api.get('announcements', { select: '*', author_id: 'eq.' + DP.api.uid, order: 'created_at.desc', limit: 100 });
-    el.innerHTML = ui.header('Annonces pour mes bénéficiaires', 'Ces messages ne sont visibles que par vos bénéficiaires.') +
+    var r = await Promise.all([
+      DP.api.get('announcements', { select: '*', author_id: 'eq.' + DP.api.uid, order: 'created_at.desc', limit: 100 }),
+      DP.vues.compter('annonce')
+    ]);
+    var rows = r[0], vues = r[1];
+    var optionsAudience = [['agent_beneficiaries', 'Mes bénéficiaires']];
+    if (me.quartier_id) optionsAudience.push(['quartier', 'Mon quartier'], ['rue', 'Une rue de mon quartier']);
+    el.innerHTML = ui.header('Annonces pour mes bénéficiaires', 'Visibles par vos bénéficiaires, ou par votre quartier, ou par une rue de votre quartier selon le choix.') +
       '<div class="grid-2">' +
       ui.card('Nouvelle annonce', '<form class="form" id="f-ann">' +
         ui.field({ name: 'title', label: 'Titre', required: true, full: true }) +
         ui.field({ name: 'body', label: 'Message', type: 'textarea', rows: 5, required: true, full: true }) +
+        ui.field({ name: 'audience', label: 'Destinataires', type: 'select', required: true, options: optionsAudience }) +
+        ui.field({ name: 'rue', label: 'Rue (si « Une rue de mon quartier »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: [['R1', DP.labels.rue.R1], ['R2', DP.labels.rue.R2], ['R3', DP.labels.rue.R3]] }) +
         DP.photo.html({ mode: 'form', compact: true, label: 'Photo (facultatif — JPG, PNG ou WebP, 3 Mo maximum)' }) +
         '<div class="form-actions"><button class="btn btn-primary" type="submit">Publier</button></div></form>') +
       ui.card('Mes annonces', ui.table([
         { label: 'Annonce', render: function (a) { return DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-thumb') + '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
-        { label: 'Date', render: function (a) { return ui.date(a.created_at); } }
+        { label: 'Date', render: function (a) { return ui.date(a.created_at); } },
+        { label: 'Destinataires', render: function (a) { return esc(DP.labels.audience[a.audience] || '') + (a.audience === 'rue' ? ' · ' + esc(a.rue || '') : ''); } },
+        { label: 'Vues', cls: 'num', render: function (a) { return DP.vues.cellule(vues, a.id, a.views_for_author, null); } }
       ], rows, 'Aucune annonce publiée.')) + '</div>';
     DP.photo.hydrate(el);
     var photo = DP.photo.bind(el.querySelector('#f-ann'), { mode: 'form' });
     ui.bindForm(el.querySelector('#f-ann'), async function (d) {
+      if (d.audience === 'rue' && !d.rue) throw new Error('Choisissez la rue (R1, R2 ou R3).');
       await DP.photo.sendWith(photo, 'annonces', 'annonce-', function (chemin) {
-        return DP.api.insert('announcements', { author_id: DP.api.uid, audience: 'agent_beneficiaries', agent_id: me.id, title: d.title, body: d.body, status: 'visible', photo_path: chemin });
+        return DP.api.insert('announcements', {
+          author_id: DP.api.uid, audience: d.audience, title: d.title, body: d.body, status: 'visible', photo_path: chemin,
+          agent_id: d.audience === 'agent_beneficiaries' ? me.id : null,
+          quartier_id: d.audience === 'agent_beneficiaries' ? null : me.quartier_id,
+          rue: d.audience === 'rue' ? d.rue : null
+        });
       });
       refresh();
       return 'Annonce publiée.';

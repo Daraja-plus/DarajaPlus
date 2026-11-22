@@ -827,6 +827,9 @@
     var partners = byId(await DP.api.get('partners', { select: 'id,legal_name', id: inq(rows.map(function (o) { return o.partner_id; })) || 'is.null' }));
     var authors = await profilesFor(rows.filter(function (o) { return o.author_kind === 'agent'; }).map(function (o) { return o.author_id; }));
     var map = byId(rows);
+    var zmap = byId(await DP.api.get('zones', { select: '*', order: 'id.asc' }));
+    var qmap = byId(await DP.api.get('quartiers', { select: 'id,name,zone_id', order: 'id.asc' }));
+    var vues = await DP.vues.compter('offre');
     el.innerHTML = ui.header('Offres et opportunités', 'Programmes, appels à projets, offres de financement. Les publications des Agents au-delà du quota mensuel passent en attente de paiement.') +
       ui.card(null, filterBar('#/admin/offres', [{ name: 'statut', label: 'Statut', value: st, options: [['', 'Tous']].concat(STATUS_OFFER) }]) +
         ui.table([
@@ -836,13 +839,22 @@
             return 'Agent ' + esc(authors[o.author_id] ? authors[o.author_id].code || '' : '');
           } },
           { label: 'Type', render: function (o) { return esc(OFFER_TYPE_LABEL[o.offer_type] || o.offer_type || '—'); } },
-          { label: 'Cible', render: function (o) { return o.target_category === 'all' || !o.target_category ? 'Toutes' : ui.categoryBadge(o.target_category); } },
+          { label: 'Cible', render: function (o) {
+            var cat = o.target_category === 'all' || !o.target_category ? 'Toutes' : ui.categoryBadge(o.target_category);
+            return cat + (o.audience && o.audience !== 'all' ? '<div class="small muted">' + esc(portee(o, zmap, qmap)) + '</div>' : '');
+          } },
           { label: 'Montant', cls: 'num', render: function (o) { return o.amount_min || o.amount_max ? ui.money(o.amount_min, o.currency) + ' à ' + ui.money(o.amount_max, o.currency) : '—'; } },
           { label: 'Échéance', render: function (o) { return ui.date(o.deadline); } },
           { label: 'Statut', render: function (o) { return ui.badge(o.status); } },
+          { label: 'Vues', cls: 'num', render: function (o) { return DP.vues.cellule(vues, o.id, o.views_for_author, 'data-vues-off'); } },
           { label: 'Action', cls: 'actions', render: function (o) { return '<button class="btn btn-sm btn-outline" type="button" data-status="' + esc(o.id) + '">Statut</button>'; } }
         ], rows, 'Aucune offre ne correspond à ces filtres.'));
     bindFilters(el);
+    act(el, '[data-vues-off]', async function (b) {
+      await DP.api.update('offers', { id: 'eq.' + b.dataset.vuesOff }, { views_for_author: b.dataset.to === 'true' });
+      ui.toast('Réglage enregistré.', 'ok');
+      refresh();
+    });
     act(el, '[data-status]', function (b) {
       var o = map[b.dataset.status];
       statusModal('Statut de l’offre', o.status, STATUS_OFFER, function (status) {
@@ -913,34 +925,47 @@
     });
   }
 
+  /* ---------- Portée des publications ---------- */
+  var RUE_COURTE = { R1: 'R1 (Gamma)', R2: 'R2 (Bêta)', R3: 'R3 (Alpha)' };
+  /* Destinataire d'une publication : zone, quartier, rue d'un quartier, bénéficiaires d'un Agent ou toute la plateforme. */
+  function portee(p, zmap, qmap) {
+    var q = qmap[p.quartier_id] ? qmap[p.quartier_id].name : '';
+    if (p.audience === 'zone') return 'Zone ' + (zmap[p.zone_id] ? zmap[p.zone_id].name : '');
+    if (p.audience === 'quartier') return 'Quartier ' + q;
+    if (p.audience === 'rue') return 'Rue ' + (RUE_COURTE[p.rue] || '') + ' · ' + q;
+    if (p.audience === 'agent_beneficiaries') return 'Bénéficiaires d’un Agent';
+    return 'Toute la plateforme';
+  }
+
   /* ---------- Annonces ---------- */
   async function renderAnnouncements(el) {
     var r = await Promise.all([
       DP.api.get('announcements', { select: '*', order: 'created_at.desc', limit: 200 }),
       DP.api.get('zones', { select: '*', order: 'id.asc' }),
-      DP.api.get('profiles', { select: 'id,code,prenom,nom,email', role: 'eq.agent', status: 'eq.active', order: 'code.asc' })
+      DP.api.get('profiles', { select: 'id,code,prenom,nom,email', role: 'eq.agent', status: 'eq.active', order: 'code.asc' }),
+      DP.api.get('quartiers', { select: 'id,name,zone_id', order: 'id.asc' }),
+      DP.vues.compter('annonce')
     ]);
-    var rows = r[0], zones = r[1], agents = r[2];
-    var zmap = byId(zones);
-    el.innerHTML = ui.header('Annonces', 'Messages diffusés à toute la plateforme, à une zone ou aux bénéficiaires d’un Agent.') +
+    var rows = r[0], zones = r[1], agents = r[2], quartiers = r[3], vues = r[4];
+    var zmap = byId(zones), qmap = byId(quartiers);
+    el.innerHTML = ui.header('Annonces', 'Messages diffusés à toute la plateforme, à une zone, à un quartier, à une rue d’un quartier, ou aux bénéficiaires d’un Agent.') +
       '<div class="grid-2">' +
       ui.card('Nouvelle annonce', '<form class="form" id="f-ann">' +
         ui.field({ name: 'title', label: 'Titre', required: true, full: true }) +
         ui.field({ name: 'body', label: 'Message', type: 'textarea', rows: 4, required: true, full: true }) +
-        ui.field({ name: 'audience', label: 'Destinataires', type: 'select', required: true, options: [['all', 'Toute la plateforme'], ['zone', 'Une zone'], ['agent_beneficiaries', 'Les bénéficiaires d’un Agent']] }) +
+        ui.field({ name: 'audience', label: 'Destinataires', type: 'select', required: true, options: [['all', 'Toute la plateforme'], ['zone', 'Une zone'], ['quartier', 'Un quartier'], ['rue', 'Une rue d’un quartier'], ['agent_beneficiaries', 'Les bénéficiaires d’un Agent']] }) +
         ui.field({ name: 'zone_id', label: 'Zone (si « Une zone »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: zones.map(function (z) { return [z.id, z.name]; }) }) +
+        ui.field({ name: 'quartier_id', label: 'Quartier (si « Un quartier » ou « Une rue »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: quartiers.map(function (q) { return [q.id, q.name + ' — ' + (zmap[q.zone_id] ? zmap[q.zone_id].name : '')]; }) }) +
+        ui.field({ name: 'rue', label: 'Rue (si « Une rue d’un quartier »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: [['R1', DP.labels.rue.R1], ['R2', DP.labels.rue.R2], ['R3', DP.labels.rue.R3]] }) +
         ui.field({ name: 'agent_id', label: 'Agent (si « Bénéficiaires d’un Agent »)', type: 'select', placeholder: 'Choisir', dataType: 'nullable', options: agents.map(function (a) { return [a.id, (a.code || '') + ' — ' + pname(a)]; }) }) +
         DP.photo.html({ mode: 'form', compact: true, label: 'Photo (facultatif — JPG, PNG ou WebP, 3 Mo maximum)' }) +
         '<div class="form-actions"><button class="btn btn-primary" type="submit">Publier</button></div></form>') +
       ui.card('Annonces publiées', ui.table([
         { label: 'Annonce', render: function (a) { return DP.photo.picture('annonces', a.photo_path, 'Photo de l’annonce', 'ann-thumb') + '<strong>' + esc(a.title) + '</strong><div class="small muted">' + esc(short(a.body, 100)) + '</div>'; } },
-        { label: 'Destinataires', render: function (a) {
-          if (a.audience === 'zone') return 'Zone ' + esc(zmap[a.zone_id] ? zmap[a.zone_id].name : '');
-          if (a.audience === 'agent_beneficiaries') return 'Bénéficiaires d’un Agent';
-          return 'Toute la plateforme';
-        } },
+        { label: 'Destinataires', render: function (a) { return esc(portee(a, zmap, qmap)); } },
         { label: 'Date', render: function (a) { return ui.date(a.created_at); } },
         { label: 'Statut', render: function (a) { return ui.badge(a.status === 'visible' ? 'published' : 'hidden'); } },
+        { label: 'Vues', cls: 'num', render: function (a) { return DP.vues.cellule(vues, a.id, a.views_for_author, 'data-vues-ann'); } },
         { label: 'Action', cls: 'actions', render: function (a) {
           return '<button class="btn btn-sm btn-outline" type="button" data-toggle="' + esc(a.id) + '" data-to="' + (a.status === 'visible' ? 'hidden' : 'visible') + '">' +
             (a.status === 'visible' ? 'Masquer' : 'Afficher') + '</button>';
@@ -952,16 +977,25 @@
     ui.bindForm(el.querySelector('#f-ann'), async function (d) {
       if (d.audience === 'zone' && !d.zone_id) throw new Error('Choisissez la zone destinataire.');
       if (d.audience === 'agent_beneficiaries' && !d.agent_id) throw new Error('Choisissez l’Agent destinataire.');
+      if ((d.audience === 'quartier' || d.audience === 'rue') && !d.quartier_id) throw new Error('Choisissez le quartier destinataire.');
+      if (d.audience === 'rue' && !d.rue) throw new Error('Choisissez la rue (R1, R2 ou R3).');
       await DP.photo.sendWith(photo, 'annonces', 'annonce-', function (chemin) {
         return DP.api.insert('announcements', {
           author_id: DP.api.uid, audience: d.audience, title: d.title, body: d.body, status: 'visible',
           zone_id: d.audience === 'zone' ? Number(d.zone_id) : null,
           agent_id: d.audience === 'agent_beneficiaries' ? d.agent_id : null,
+          quartier_id: (d.audience === 'quartier' || d.audience === 'rue') ? Number(d.quartier_id) : null,
+          rue: d.audience === 'rue' ? d.rue : null,
           photo_path: chemin
         });
       });
       refresh();
       return 'Annonce publiée.';
+    });
+    act(el, '[data-vues-ann]', async function (b) {
+      await DP.api.update('announcements', { id: 'eq.' + b.dataset.vuesAnn }, { views_for_author: b.dataset.to === 'true' });
+      ui.toast('Réglage enregistré.', 'ok');
+      refresh();
     });
     act(el, '[data-toggle]', async function (b) {
       await DP.api.update('announcements', { id: 'eq.' + b.dataset.toggle }, { status: b.dataset.to });
