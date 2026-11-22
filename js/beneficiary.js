@@ -136,6 +136,7 @@
         '<a class="btn btn-outline" href="#/espace/opportunites">Opportunités</a>' +
         '<a class="btn btn-outline" href="#/espace/profil">Mon profil et mes pièces</a>' +
         '<a class="btn btn-ghost" href="#/messages">Écrire à l’Administrateur</a></div>');
+    await DP.feed.mount(el);
   }
 
   /* ---------- Ma catégorie : choix, proposition de l'Agent, acceptation ---------- */

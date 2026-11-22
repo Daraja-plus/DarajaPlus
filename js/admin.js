@@ -173,6 +173,7 @@
         '<a class="btn btn-outline" href="#/admin/messages">Messages</a>' +
         '<a class="btn btn-outline" href="#/admin/contacts">Contacts</a></div>' +
         '<p class="small muted">Chaque notification de la plateforme arrive dans « Notifications ».</p>');
+    await DP.feed.mount(el);
   }
 
   /* ---------- Comptes ---------- */

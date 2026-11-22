@@ -106,6 +106,7 @@
         '<a class="btn btn-outline" href="#/partenaire/offres">Mes offres</a>' +
         '<a class="btn btn-outline" href="#/partenaire/resultats">Déclarer un résultat</a>' +
         '<a class="btn btn-ghost" href="#/messages">Écrire à l’Administrateur</a></div>');
+    await DP.feed.mount(el);
   }
 
   /* ---------- Profil ---------- */

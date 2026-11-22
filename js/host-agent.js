@@ -124,6 +124,7 @@
         '<a class="btn btn-outline" href="#/hote/dossiers">Dossiers & projets</a>' +
         '<a class="btn btn-outline" href="#/hote/annonces">Publier une annonce de zone</a>' +
         '<a class="btn btn-ghost" href="#/messages">Écrire à l’Administrateur</a></div>');
+    await DP.feed.mount(el);
   }
 
   async function renderHostAgents(el) {
@@ -295,6 +296,7 @@
         '<a class="btn btn-outline" href="#/agent/carrefours">Carrefours</a>' +
         '<a class="btn btn-outline" href="#/agent/offres">Publier une offre</a></div>') +
       ui.card('Rappel', '<p class="small">Un bénéficiaire ne peut être activé que par l’Hôte ou l’Administrateur. Vous préparez la fiche, complétez le dossier et le transmettez à l’équipe.</p>');
+    await DP.feed.mount(el);
   }
 
   async function renderAgentBeneficiaries(el, ctx) {
