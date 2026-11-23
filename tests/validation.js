@@ -20,7 +20,7 @@ function check(label, ok, extra) {
 }
 
 function profileRow(status, validatedAt) {
-  return { id: BEN_ID, role: 'beneficiary', status: status, prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local',
+  return { id: BEN_ID, role: 'beneficiary', status: status, province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local',
     code: null, category: null, requested_role: 'beneficiary', validated_at: validatedAt, created_at: '2026-11-10T10:00:00Z',
     phone: null, zone_id: null, host_id: null, agent_id: null, quartier_id: null, rejection_reason: null };
 }

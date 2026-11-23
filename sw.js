@@ -2,7 +2,7 @@
    Objectif : l'application s'ouvre même avec une connexion faible ou coupée.
    Les données (Supabase et autres services externes) ne sont jamais mises en cache : elles restent en ligne. */
 
-const CACHE = 'daraja-app-v35';
+const CACHE = 'daraja-app-v36';
 const SHELL = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const SHELL = [
   'js/config.js',
   'js/api.js',
   'js/ui.js',
+  'js/geo.js',
   'js/push.js',
   'js/photo.js',
   'js/app.js',

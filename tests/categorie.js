@@ -75,7 +75,7 @@ async function visit(context, hash) {
   const browser = await chromium.launch();
   try {
     /* 1) Pas encore affecté, aucun choix */
-    const s1 = { profile: { id: BEN_ID, role: 'beneficiary', status: 'active', identifiant: 'DP-000001', prenom: 'Bénéf', nom: 'Test', photo_path: null, validated_at: '2026-11-12T08:30:00Z' },
+    const s1 = { profile: { id: BEN_ID, role: 'beneficiary', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', identifiant: 'DP-000001', prenom: 'Bénéf', nom: 'Test', photo_path: null, validated_at: '2026-11-12T08:30:00Z' },
       ben: benRow({}), cstate: { status: 'draft', identifiant: 'DP-000001', code: null, category: null, wish: null, wish_at: null, affected: false, agent: null, places: {}, proposal: null } };
     let ctx = await openContext(browser, s1, BEN_ID, 'beneficiary');
     let r = await visit(ctx, '#/espace/categorie');
@@ -126,7 +126,7 @@ async function visit(context, hash) {
     await ctx.close();
 
     /* 5) Agent : fiche en attente et proposition */
-    const sa = { profile: { id: AGENT_ID, role: 'agent', status: 'active', prenom: 'Agent', nom: 'Test', code: 'AH1A1', host_id: null, zone_id: 1 },
+    const sa = { profile: { id: AGENT_ID, role: 'agent', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Agent', nom: 'Test', code: 'AH1A1', host_id: null, zone_id: 1 },
       board: { quota: { ba: { total: 60, taken: 10, left: 50 }, bb: { total: 30, taken: 2, left: 28 }, bg: { total: 10, taken: 9, left: 1 } },
         waiting: [{ beneficiary_id: 'b-1', identifiant: 'DP-000001', prenom: 'Bénéf', nom: 'Test', phone: '+243800000000', wish: 'bb',
           wish_at: '2026-11-12T09:00:00Z', created_at: '2026-11-12T08:00:00Z', proposal: null }],

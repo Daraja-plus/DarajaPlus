@@ -33,7 +33,7 @@ function check(label, ok, extra) {
 }
 
 function profil(over) {
-  return Object.assign({ id: '', role: 'beneficiary', status: 'active', prenom: 'Prénom', nom: 'Nom', email: 'x@test.local',
+  return Object.assign({ id: '', role: 'beneficiary', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Prénom', nom: 'Nom', email: 'x@test.local',
     code: null, identifiant: null, zone_id: null, host_id: null, quartier_id: null, agent_id: null, category: null,
     created_at: '2026-11-10T10:00:00Z' }, over || {});
 }

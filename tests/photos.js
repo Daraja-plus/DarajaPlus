@@ -159,7 +159,7 @@ function bigJpegBase64(page) {
     await sg.page.context().close();
 
     /* 3) Mon compte : photo trop lourde, compressée puis enregistrée */
-    const sMC = { profile: { id: BEN_ID, role: 'beneficiary', status: 'active', identifiant: 'DP-000001', prenom: 'Bénéf', nom: 'Test', photo_path: null }, ben: benRow() };
+    const sMC = { profile: { id: BEN_ID, role: 'beneficiary', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', identifiant: 'DP-000001', prenom: 'Bénéf', nom: 'Test', photo_path: null }, ben: benRow() };
     let ctx = await openContext(browser, sMC, BEN_ID);
     let mc = await visit(ctx, '#/mon-compte');
     check('mon compte : champ photo présent', (await countOf(mc.page, '#mc-photo [data-photo-input]')) === 1);
@@ -228,7 +228,7 @@ function bigJpegBase64(page) {
       beneficiary_identifiant: 'DP-000002', photos: [] });
     const rowC = Object.assign({}, rowA, { project_id: 'cccccccc-3333-4333-8333-333333333333', title: 'Extension du local', status: 'ready',
       connection_status: 'requested', photos: [] });
-    const sP = { profile: { id: PARTNER_ID, role: 'partner', status: 'active', prenom: 'Banque', nom: 'Test', photo_path: null },
+    const sP = { profile: { id: PARTNER_ID, role: 'partner', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Banque', nom: 'Test', photo_path: null },
       partner: { id: 'pt-1', profile_id: PARTNER_ID, legal_name: 'Banque Test', category: 'bank', status: 'active' },
       projects: [rowA, rowB, rowC] };
     ctx = await openContext(browser, sP, PARTNER_ID);

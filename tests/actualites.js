@@ -28,8 +28,8 @@ const PART_USER = '55555555-5555-4555-8555-555555555555';
 const PARTNER_ID = 'p-1';
 
 const PROFILES = {
-  beneficiary: { id: BEN_USER, role: 'beneficiary', status: 'active', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local', created_at: NOW },
-  partner: { id: PART_USER, role: 'partner', status: 'active', prenom: 'Partenaire', nom: 'Test', email: 'part@test.local', created_at: NOW }
+  beneficiary: { id: BEN_USER, role: 'beneficiary', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local', created_at: NOW },
+  partner: { id: PART_USER, role: 'partner', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Partenaire', nom: 'Test', email: 'part@test.local', created_at: NOW }
 };
 
 /* Jeu d'essai : une annonce masquée, une offre en brouillon et une offre pour la seule catégorie Ba

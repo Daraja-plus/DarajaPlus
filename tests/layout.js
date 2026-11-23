@@ -35,6 +35,7 @@ function check(label, ok, extra) {
 
 function profileRow(role) {
   return { id: USER_ID, role: role, status: 'active', prenom: 'Test', nom: role, postnom: 'Essai', email: 'test@test.local',
+    province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe',
     code: 'TST1', category: 'bb', requested_role: role, validated_at: '2026-11-10T10:00:00Z', created_at: '2026-11-10T10:00:00Z',
     phone: null, zone_id: null, host_id: null, agent_id: null, quartier_id: null, rejection_reason: null };
 }

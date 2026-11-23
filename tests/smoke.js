@@ -20,11 +20,11 @@ const ADMIN_ID = '66666666-6666-4666-8666-666666666666';
 const BENEF_ID = '77777777-7777-4777-8777-777777777777';
 
 const PROFILES = {
-  admin: { id: ADMIN_ID, role: 'admin', status: 'active', prenom: 'Admin', nom: 'Test', email: 'admin@test.local', code: 'ADM' },
-  host: { id: HOST_ID, role: 'host', status: 'active', prenom: 'Hôte', nom: 'Test', email: 'hote@test.local', code: 'AH1', zone_id: 1 },
-  agent: { id: AGENT_ID, role: 'agent', status: 'active', prenom: 'Agent', nom: 'Test', email: 'agent@test.local', code: 'AH1A1', zone_id: 1, host_id: HOST_ID, quartier_id: 1 },
-  beneficiary: { id: BENEF_ID, role: 'beneficiary', status: 'active', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local', code: 'AH1A1Bb1', category: 'bb', agent_id: AGENT_ID },
-  partner: { id: PARTNER_ID, role: 'partner', status: 'active', prenom: 'Partenaire', nom: 'Test', email: 'part@test.local' }
+  admin: { id: ADMIN_ID, role: 'admin', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Admin', nom: 'Test', email: 'admin@test.local', code: 'ADM' },
+  host: { id: HOST_ID, role: 'host', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Hôte', nom: 'Test', email: 'hote@test.local', code: 'AH1', zone_id: 1 },
+  agent: { id: AGENT_ID, role: 'agent', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Agent', nom: 'Test', email: 'agent@test.local', code: 'AH1A1', zone_id: 1, host_id: HOST_ID, quartier_id: 1 },
+  beneficiary: { id: BENEF_ID, role: 'beneficiary', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local', code: 'AH1A1Bb1', category: 'bb', agent_id: AGENT_ID },
+  partner: { id: PARTNER_ID, role: 'partner', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Partenaire', nom: 'Test', email: 'part@test.local' }
 };
 
 /* Jeu d’essai : une ligne représentative par table, cohérente entre les tables (mêmes identifiants). */

@@ -42,7 +42,7 @@ const FAKE_PUSH = `
   })();`;
 
 function profileRow() {
-  return { id: BEN_ID, role: 'beneficiary', status: 'active', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local',
+  return { id: BEN_ID, role: 'beneficiary', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local',
     code: 'AH1A1Bb1', category: 'bb', requested_role: 'beneficiary', validated_at: '2026-11-10T10:00:00Z',
     created_at: '2026-11-10T10:00:00Z', phone: null, zone_id: null, host_id: null, agent_id: null, quartier_id: null, rejection_reason: null };
 }

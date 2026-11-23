@@ -46,7 +46,7 @@ function check(label, ok, extra) {
 }
 
 function profile() {
-  return { id: USER_ID, role: 'beneficiary', status: 'active', email: 'ben@test.local', nom: 'Test', postnom: 'Demo',
+  return { id: USER_ID, role: 'beneficiary', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', email: 'ben@test.local', nom: 'Test', postnom: 'Demo',
     prenom: 'Bénéf', phone: '+243800000000', photo_path: null, code: null, category: null, created_at: '2026-11-12T08:00:00Z' };
 }
 function ben(category) {

@@ -24,7 +24,7 @@ function check(label, ok, extra) {
 }
 
 function agentProfile() {
-  return { id: AGENT_ID, role: 'agent', status: 'active', prenom: 'Agent', nom: 'Test', email: 'agent@test.local',
+  return { id: AGENT_ID, role: 'agent', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Agent', nom: 'Test', email: 'agent@test.local',
     code: 'AH1A1', host_id: HOST_ID, zone_id: 1, quartier_id: 1, created_at: '2026-11-12T08:00:00Z' };
 }
 

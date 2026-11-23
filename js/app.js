@@ -299,6 +299,7 @@
         var photoUrl = p.photo_path ? await DP.api.signedUrlFor('visuels', p.photo_path, 3600).catch(function () { return ''; }) : '';
         var initials = ((p.prenom || '').charAt(0) + (p.nom || '').charAt(0)).toUpperCase() || '?';
         el.innerHTML = DP.ui.header('Mon compte', 'Votre photo, vos informations personnelles et votre mot de passe') +
+          (DP.geo.complete(p) ? '' : DP.ui.alert('warn', '<strong>Avant de continuer, indiquez votre province et votre ville ou village.</strong> C’est obligatoire pour tous les comptes.')) +
           '<div class="grid-2">' +
           DP.ui.card('Photo de profil', '<div id="mc-photo">' + DP.photo.html({
             mode: 'save', url: photoUrl, initials: initials, alt: 'Votre photo de profil',
@@ -312,6 +313,13 @@
             '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer</button></div></form>' +
             '<p class="small muted">Rôle : ' + esc(DP.labels.role[p.role]) +
             (p.code ? ' · Identifiant : ' + esc(p.code) : '') + '</p>') +
+          DP.ui.card('Localisation (obligatoire)', '<form class="form" id="f-loc" novalidate>' +
+            DP.ui.field({ name: 'province', label: 'Province', type: 'select', options: DP.geo.provinceOptions, value: p.province, placeholder: 'Choisissez votre province…', required: true }) +
+            '<div class="field-row">' +
+              DP.ui.field({ name: 'localite_type', label: 'Ville ou village', type: 'select', options: DP.geo.typeOptions, value: p.localite_type, placeholder: 'Ville ou village ?', required: true }) +
+              DP.ui.field({ name: 'localite_nom', label: 'Nom de la ville ou du village', value: p.localite_nom, placeholder: 'Ex. Kikwit, Gombe…', required: true }) +
+            '</div>' +
+            '<div class="form-actions"><button class="btn btn-primary" type="submit">Enregistrer la localisation</button></div></form>') +
           DP.ui.card('Adresse e-mail', '<form class="form" id="f-email" novalidate>' +
             '<p class="small muted">Adresse actuelle : <strong>' + esc(p.email || '—') + '</strong></p>' +
             DP.ui.field({ name: 'email', label: 'Nouvelle adresse e-mail', type: 'email', required: true, placeholder: 'vous@exemple.com', hint: 'Un lien de confirmation est envoyé à la nouvelle adresse. Votre adresse ne change qu’après confirmation.' }) +
@@ -326,6 +334,19 @@
           await DP.api.update('profiles', { id: 'eq.' + DP.api.uid }, { nom: data.nom, postnom: data.postnom, prenom: data.prenom, phone: data.phone || null });
           await DP.app.loadProfile();
           return 'Informations enregistrées.';
+        });
+        DP.ui.bindForm(el.querySelector('#f-loc'), async function (data) {
+          var err = DP.geo.erreur(data);
+          if (err) throw new Error(err);
+          await DP.api.update('profiles', { id: 'eq.' + DP.api.uid }, {
+            province: data.province, localite_type: data.localite_type, localite_nom: String(data.localite_nom).trim()
+          });
+          await DP.app.loadProfile();
+          /* Venu de la garde de navigation : une fois complète, la localisation renvoie à l'espace d'accueil. */
+          if (DP.geo.complete(DP.app.profile) && ctx.query && ctx.query.get('localisation')) {
+            location.hash = DP.app.homeFor(DP.app.profile.role);
+          }
+          return 'Localisation enregistrée.';
         });
         DP.ui.bindForm(el.querySelector('#f-pw'), async function (data) {
           if (data.password.length < 6) throw new Error('Le mot de passe doit contenir au moins 6 caractères.');
@@ -464,6 +485,12 @@
     }
 
     var route = found.route;
+    /* Localisation obligatoire pour tous les rôles : tant qu'elle n'est pas complète, seul « Mon compte »
+       est accessible (ainsi que les pages publiques, et non la page « en attente »). */
+    if (profile && !DP.geo.complete(profile) && path !== '/mon-compte' && (!route.public || path === '/en-attente')) {
+      location.hash = '#/mon-compte?localisation=1';
+      return;
+    }
     if (!route.public) {
       if (!DP.api.uid) { location.hash = '#/connexion?next=' + encodeURIComponent(path); return; }
       if (!profile) {

@@ -44,9 +44,9 @@ function check(label, ok, extra) {
 }
 
 const PROFILES = [
-  { id: ADMIN_ID, role: 'admin', status: 'active', prenom: 'Admin', nom: 'Test', email: 'admin@test.local', code: 'ADM' },
-  { id: BEN_ID, role: 'beneficiary', status: 'active', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local', identifiant: 'AH1A1Bb1', category: 'bb' },
-  { id: PARTNER_ID, role: 'partner', status: 'active', prenom: 'Partenaire', nom: 'Test', email: 'part@test.local' }
+  { id: ADMIN_ID, role: 'admin', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Admin', nom: 'Test', email: 'admin@test.local', code: 'ADM' },
+  { id: BEN_ID, role: 'beneficiary', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Bénéf', nom: 'Test', email: 'ben@test.local', identifiant: 'AH1A1Bb1', category: 'bb' },
+  { id: PARTNER_ID, role: 'partner', status: 'active', province: 'Kinshasa', localite_type: 'ville', localite_nom: 'Gombe', prenom: 'Partenaire', nom: 'Test', email: 'part@test.local' }
 ];
 
 /* Filtres PostgREST simplifiés : seul « eq. » est géré ; select, order et limit sont ignorés. */

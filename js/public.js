@@ -371,6 +371,11 @@
               DP.ui.field({ name: 'phone', label: 'Téléphone', type: 'tel', placeholder: '+243…' }) +
             '</div>' +
             '<div class="field-row">' +
+              DP.ui.field({ name: 'province', label: 'Province (obligatoire)', type: 'select', options: DP.geo.provinceOptions, placeholder: 'Choisissez votre province…' }) +
+              DP.ui.field({ name: 'localite_type', label: 'Ville ou village (obligatoire)', type: 'select', options: DP.geo.typeOptions, placeholder: 'Ville ou village ?' }) +
+            '</div>' +
+            DP.ui.field({ name: 'localite_nom', label: 'Nom de la ville ou du village (obligatoire)', placeholder: 'Ex. Kikwit, Gombe…' }) +
+            '<div class="field-row">' +
               DP.ui.field({ name: 'password', label: 'Mot de passe', type: 'password', hint: 'Au moins 6 caractères (8 recommandés).' }) +
               DP.ui.field({ name: 'confirm', label: 'Confirmer le mot de passe', type: 'password' }) +
             '</div>' +
@@ -421,8 +426,13 @@
             if (pw.length < 6) throw new Error('Le mot de passe doit contenir au moins 6 caractères.');
             if (pw !== String(fd.get('confirm') || '')) throw new Error('Les deux mots de passe ne correspondent pas.');
             if (!fd.get('consent')) throw new Error('Vous devez accepter les conditions pour créer un compte.');
+            var locErr = DP.geo.erreur({ province: v('province'), localite_type: v('localite_type'), localite_nom: v('localite_nom') });
+            if (locErr) throw new Error(locErr);
 
-            var meta = { requested_role: role, nom: v('nom'), postnom: v('postnom'), prenom: v('prenom'), phone: v('phone') || null };
+            var meta = {
+              requested_role: role, nom: v('nom'), postnom: v('postnom'), prenom: v('prenom'), phone: v('phone') || null,
+              province: v('province'), localite_type: v('localite_type'), localite_nom: v('localite_nom')
+            };
             if (role === 'partner') {
               if (!v('partner_category')) throw new Error('Choisissez la catégorie de votre organisation.');
               if (!v('legal_name')) throw new Error('Indiquez la raison sociale ou le nom de votre organisation.');
