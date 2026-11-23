@@ -91,6 +91,24 @@ async function hashOf(page) {
   return page.evaluate(() => location.hash).catch(() => '');
 }
 
+/* Garde dans la page chaque notification dès son apparition : elle ne peut plus disparaître avant le contrôle. */
+async function garderNotifications(page) {
+  await page.evaluate(() => {
+    window.__notifs = [];
+    new MutationObserver(function (muts) {
+      muts.forEach(function (m) {
+        m.addedNodes.forEach(function (n) {
+          if (n.nodeType === 1 && n.classList && n.classList.contains('toast')) window.__notifs.push(n.textContent);
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+}
+
+async function notificationAttendue(page, regex) {
+  return page.waitForFunction((src) => new RegExp(src).test(window.__notifs.join(' | ')), regex.source, { timeout: 15000 }).then(() => true, () => false);
+}
+
 async function until(fn, ms) {
   const t0 = Date.now();
   while (Date.now() - t0 < ms) {
@@ -125,10 +143,10 @@ async function remplirInscription(page) {
     await remplirInscription(ins.page);
     await ins.page.locator('input[name="localite_nom"]').fill('Kikwit');
     await ins.page.locator('select[name="localite_type"]').selectOption('village');
-    /* Le message reste 4,3 s : l'attente est armée dans la page AVANT le clic, pour ne pas le rater sur une machine chargée. */
-    const refuseeP = ins.page.waitForFunction(() => /Choisissez votre province/.test(document.body.innerText), null, { timeout: 8000 }).then(() => true, () => false);
+    /* Le message reste 4,3 s : il est gardé dans la page dès son apparition (voir garderNotifications). */
+    await garderNotifications(ins.page);
     await ins.page.locator('#f-signup button[type="submit"]').click();
-    const refusee = await refuseeP;
+    const refusee = await notificationAttendue(ins.page, /Choisissez votre province/);
     check('sans province : message affiché', refusee);
     check('sans province : aucune demande d’inscription envoyée', v.__log.filter((e) => e.path === '/auth/v1/signup').length === 0);
 
@@ -146,7 +164,7 @@ async function remplirInscription(page) {
     const espace = await visit(a, '#/espace');
     const renvoye = await espace.page.waitForFunction(() => location.hash.indexOf('mon-compte') !== -1, null, { timeout: 20000 }).then(() => true, () => false);
     check('compte actif sans localisation : renvoyé vers Mon compte', renvoye, await hashOf(espace.page));
-    check('compte actif sans localisation : bandeau « Avant de continuer » affiché', /Avant de continuer/.test(espace.text));
+    check('compte actif sans localisation : message « Complétez votre profil » affiché', /Complétez votre profil/.test(espace.text));
 
     /* 5) Compte en attente sans localisation : la page « en attente » renvoie aussi vers Mon compte */
     const e = await openContext(browser, USER_ID, profileSansLocalisation({ status: 'pending' }));
@@ -157,11 +175,14 @@ async function remplirInscription(page) {
     /* 6) Mon compte : localisation partielle refusée, aucune écriture */
     const p1 = await openContext(browser, USER_ID, profileSansLocalisation());
     const mc = await visit(p1, '#/mon-compte?localisation=1');
+    /* Attendre que la page soit stable (rendus tardifs terminés) avant de remplir le formulaire. */
+    await mc.page.waitForLoadState('networkidle').catch(() => {});
+    await mc.page.waitForTimeout(500);
     await mc.page.locator('#f-loc select[name="province"]').selectOption('Kinshasa');
     await mc.page.locator('#f-loc select[name="localite_type"]').selectOption('ville');
-    const sansNomP = mc.page.waitForFunction(() => /Indiquez le nom de votre ville ou de votre village/.test(document.body.innerText), null, { timeout: 8000 }).then(() => true, () => false);
+    await garderNotifications(mc.page);
     await mc.page.locator('#f-loc button[type="submit"]').click();
-    const sansNom = await sansNomP;
+    const sansNom = await notificationAttendue(mc.page, /Indiquez le nom de votre ville ou de votre village/);
     check('localisation partielle : message affiché', sansNom);
     check('localisation partielle : aucune écriture envoyée', p1.__log.filter((x) => x.method === 'PATCH' && x.path === '/rest/v1/profiles').length === 0);
 
@@ -175,7 +196,7 @@ async function remplirInscription(page) {
       patch.indexOf('"province":"Kinshasa"') !== -1 && patch.indexOf('"localite_type":"ville"') !== -1 && patch.indexOf('"localite_nom":"Gombe"') !== -1);
     const retour = await mc.page.waitForFunction(() => location.hash.indexOf('mon-compte') === -1, null, { timeout: 20000 }).then(() => true, () => false);
     check('localisation complète : retour vers l’espace', retour, await hashOf(mc.page));
-    const bandeauParti = await mc.page.waitForFunction(() => !/Avant de continuer/.test(document.body.innerText), null, { timeout: 15000 }).then(() => true, () => false);
+    const bandeauParti = await mc.page.waitForFunction(() => !/Complétez votre profil/.test(document.body.innerText), null, { timeout: 15000 }).then(() => true, () => false);
     check('localisation complète : bandeau disparu', bandeauParti);
 
     /* 8) Pages publiques accessibles sans localisation */

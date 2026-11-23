@@ -299,7 +299,7 @@
         var photoUrl = p.photo_path ? await DP.api.signedUrlFor('visuels', p.photo_path, 3600).catch(function () { return ''; }) : '';
         var initials = ((p.prenom || '').charAt(0) + (p.nom || '').charAt(0)).toUpperCase() || '?';
         el.innerHTML = DP.ui.header('Mon compte', 'Votre photo, vos informations personnelles et votre mot de passe') +
-          (DP.geo.complete(p) ? '' : DP.ui.alert('warn', '<strong>Avant de continuer, indiquez votre province et votre ville ou village.</strong> C’est obligatoire pour tous les comptes.')) +
+          (DP.geo.complete(p) ? '' : DP.ui.alert('warn', '<strong>Complétez votre profil.</strong> Pour accéder à votre espace, indiquez votre province, puis si vous êtes en ville ou en village, et son nom. C’est obligatoire pour tous les comptes.')) +
           '<div class="grid-2">' +
           DP.ui.card('Photo de profil', '<div id="mc-photo">' + DP.photo.html({
             mode: 'save', url: photoUrl, initials: initials, alt: 'Votre photo de profil',
