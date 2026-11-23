@@ -8,7 +8,8 @@
 --  4. Visible par l'administrateur seulement : aucune fonction partenaire ne renvoie ces colonnes.
 --
 -- Colonnes vides autorisées pour les comptes existants : tout est renseigné ensemble ou pas du tout.
--- Migration NON appliquée. Elle est testée dans supabase/scripts (transaction annulée) avant application.
+-- Appliquée en production le 23 novembre 2026, après accord du promoteur. Vérifiée : colonnes, contrainte,
+-- fonction d'inscription, et test de la contrainte dans une transaction annulée.
 
 alter table public.profiles
   add column if not exists province text,
