@@ -18,11 +18,11 @@
 --  - La catégorie suit la rue (R1 = Bg, R2 = Bb, R3 = Ba), comme dans 20261120110000.
 --  - Exemple corrigé : le message du promoteur associait R1 à « Ba1 ». La règle validée
 --    (R1 = Gamma) l'emporte : le code porte Bg1, pas Ba1.
---  - Le segment C1 est fixe : une seule Cité contient toutes les zones.
---    Les autres segments (zone, quartier, rue, place, hôte, agent, catégorie, ordre) varient
---    d'un emplacement à l'autre. Le code d'un emplacement ne change jamais.
+--  - « DP-C1 » est le même pour tous les codes : une seule Cité contient toutes les zones.
+--    Ce sont les autres segments (zone, quartier, rue, place, hôte, agent, catégorie, ordre)
+--    qui varient d'un emplacement à l'autre. Le code d'un emplacement ne change jamais.
 --  - Le suffixe « ordre » est numéroté dans toute la Cité, par catégorie (Bg1 à Bg500, etc.).
---    Point ouvert (C12) : ordre dans toute la Cité, ou dans chaque quartier ?
+--    Point ouvert : ordre dans toute la Cité, ou dans chaque quartier ?
 --
 -- Migration NON appliquée. Test en transaction annulée seulement.
 
