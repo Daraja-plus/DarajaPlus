@@ -57,10 +57,9 @@
     ['autre', 'Autre']
   ];
 
+  /* Inscription : seuls le bénéficiaire et le partenaire. Agent et Hôte sont des nominations de l’Administrateur. */
   var ROLE_CARDS = [
     ['beneficiary', 'Bénéficiaire', 'Micro, petite ou moyenne entreprise, ou porteur de projet.'],
-    ['agent', 'Agent', 'Accompagnateur de terrain qui prépare les dossiers des bénéficiaires.'],
-    ['host', 'Hôte territorial', 'Responsable d’une zone et de ses Agents.'],
     ['partner', 'Partenaire', 'Institution financière, investisseur, incubateur ou autre contributeur.']
   ];
 
