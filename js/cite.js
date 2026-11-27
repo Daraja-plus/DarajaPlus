@@ -1,9 +1,13 @@
-/* Visite de la Cité 1 DarajaPlus : les 5 000 établissements, classés par Hôte (zone), puis Agent (quartier),
+/* Visite de la Cité 1 DarajaPlus : les établissements, classés par Hôte (zone), puis Agent (quartier),
    puis Bg, Bb et Ba (R1, R2, R3).
-   - Tout compte actif (Administrateur, Hôte, Agent, Partenaire, Bénéficiaire) voit le code, la catégorie et le statut
-     (libre ou occupé). La lecture passe par la vue etablissements_visite : aucun propriétaire, aucun nom.
-   - Seul l’Administrateur voit les totaux exacts et les propriétaires : il lit la table etablissements, que la base
-     réserve à son rôle. Les autres comptes ne peuvent pas la lire.
+   - Ce que chaque compte voit (réponses du promoteur, 26 et 27 nov.) :
+       Administrateur : tout, avec les totaux, les propriétaires et la publication aux partenaires ;
+       Hôte : les établissements de sa zone ; Agent : ceux de son quartier ;
+       Bénéficiaire : toute la Cité 1 ; Partenaire : seulement les établissements rendus publics.
+     Tous voient le code, la catégorie et le statut (libre ou occupé). La lecture passe par la vue
+     etablissements_visite : aucun propriétaire, aucun nom.
+   - Seul l’Administrateur lit la table etablissements (totaux exacts, propriétaires). Il peut rendre public
+     un établissement aux partenaires ou le retirer, par la fonction set_etablissement_publie.
    Les quartiers ne sont dessinés qu’à l’ouverture, pour rester rapides sur téléphone. */
 (function () {
   var DP = window.DP;
@@ -17,7 +21,9 @@
     ba: 'R3 · microentreprises (Alpha)'
   };
   var SELECT_VISITE = 'code,zone_id,quartier_id,quartier_rang,rue,categorie,place,ordre,statut';
-  var SELECT_ADMIN = SELECT_VISITE + ',nom,owner:profiles!owner_profile_id(prenom,nom,email,code)';
+  var SELECT_ADMIN = SELECT_VISITE + ',nom,publie,owner:profiles!owner_profile_id(prenom,nom,email,code)';
+  /* Page affichée (admin : données de la table, pour que la publication soit mise à jour sur place). */
+  var courant = null;
 
   function nomPersonne(p) {
     if (!p) return '—';
@@ -28,11 +34,25 @@
     return s === 'occupe' ? '<span class="badge badge-muted">Occupé</span>' : '<span class="badge badge-ok">Libre</span>';
   }
 
-  function intro(admin) {
-    var base = 'Les 5 000 établissements de la Cité 1, classés par Hôte (zone), Agent (quartier), puis Bg, Bb et Ba. ';
-    return admin
-      ? base + 'Vous voyez les totaux exacts et les propriétaires.'
-      : base + 'Vous voyez le code, la catégorie et si l’établissement est libre ou occupé. Les propriétaires sont réservés à l’Administrateur.';
+  function intro(role) {
+    var base = 'Classés par Hôte (zone), Agent (quartier), puis Bg, Bb et Ba. ';
+    var cite = 'La Cité 1 compte 5 000 établissements. ';
+    var libreOccupe = 'Vous voyez le code, la catégorie et si l’établissement est libre ou occupé. ';
+    var proprietaires = 'Les propriétaires sont réservés à l’Administrateur.';
+    if (role === 'admin') {
+      return base + cite + 'Vous voyez les totaux exacts, les propriétaires, et les établissements rendus publics aux partenaires.';
+    }
+    if (role === 'host') return base + 'Vous voyez les établissements de votre zone. ' + libreOccupe + proprietaires;
+    if (role === 'agent') return base + 'Vous voyez les établissements de votre quartier. ' + libreOccupe + proprietaires;
+    if (role === 'partner') return base + 'Vous voyez les établissements que l’Administrateur a rendus publics. ' + libreOccupe;
+    return base + cite + libreOccupe + proprietaires;
+  }
+
+  function messageVide(role) {
+    if (role === 'partner') return 'Aucun établissement n’est encore rendu public par l’Administrateur.';
+    if (role === 'host') return 'Aucune zone ne vous est encore rattachée : aucun établissement à afficher.';
+    if (role === 'agent') return 'Aucun quartier ne vous est encore rattaché : aucun établissement à afficher.';
+    return 'Les établissements de la Cité 1 ne sont pas encore créés.';
   }
 
   /* Lit toutes les lignes, par tranches de 1 000 (limite de lecture du serveur). */
@@ -86,6 +106,12 @@
         if (!e.owner) return '<span class="muted">—</span>';
         return esc(nomPersonne(e.owner)) + (e.owner.code ? '<div class="small muted">' + esc(e.owner.code) + '</div>' : '');
       } });
+      cols.push({ label: 'Rendu public', render: function (e) {
+        var publie = e.publie === true;
+        return (publie ? '<span class="badge badge-ok">Oui</span>' : '<span class="badge badge-muted">Non</span>') +
+          ' <button type="button" class="btn btn-outline" data-publie="' + esc(e.code) + '" data-valeur="' + (publie ? 'false' : 'true') + '">' +
+          (publie ? 'Retirer' : 'Rendre public') + '</button>';
+      } });
     }
     return cols;
   }
@@ -112,10 +138,40 @@
       '<div class="cite-quartiers">' + quartiers + '</div></details>';
   }
 
+  /* Redessine le contenu d’un quartier après une publication (les lignes sont partagées avec courant.lignes). */
+  async function basculerPublication(bouton) {
+    var code = bouton.getAttribute('data-publie');
+    var valeur = bouton.getAttribute('data-valeur') === 'true';
+    bouton.disabled = true;
+    try {
+      await DP.api.rpc('set_etablissement_publie', { p_code: code, p_publie: valeur });
+    } catch (e) {
+      bouton.disabled = false;
+      ui.toast((e && e.message) || 'La publication n’a pas pu être modifiée.', 'bad');
+      return;
+    }
+    var ligne = courant.lignes.find(function (e) { return e.code === code; });
+    if (ligne) ligne.publie = valeur;
+    var quartier = bouton.closest('details[data-index]');
+    if (quartier) {
+      quartier.querySelector('.cite-corps').innerHTML = corpsQuartier(courant.registre[Number(quartier.dataset.index)], true);
+    }
+    ui.toast(valeur ? 'Établissement rendu public aux partenaires.' : 'Établissement retiré de la vue des partenaires.', 'ok');
+  }
+
+  /* Un seul écouteur pour toute l’application : il ne concerne que la page affichée. */
+  document.addEventListener('click', function (ev) {
+    var bouton = ev.target && ev.target.closest && ev.target.closest('button[data-publie]');
+    if (!bouton || !courant || !courant.admin || !courant.el.contains(bouton)) return;
+    basculerPublication(bouton);
+  });
+
   async function renderVisite(el) {
+    var role = DP.app.profile.role;
     var admin = DP.app.isAdmin();
-    var titre = DP.app.profile.role === 'beneficiary' ? 'Voir les autres établissements' : 'Visiter la Cité 1 DarajaPlus';
-    el.innerHTML = ui.header(titre, intro(admin)) + '<div class="loading" role="status">Chargement…</div>';
+    var titre = role === 'beneficiary' ? 'Voir les autres établissements' : 'Visiter la Cité 1 DarajaPlus';
+    courant = null;
+    el.innerHTML = ui.header(titre, intro(role)) + '<div class="loading" role="status">Chargement…</div>';
 
     var donnees;
     try {
@@ -125,28 +181,28 @@
         lireTout(admin ? 'etablissements' : 'etablissements_visite', admin ? SELECT_ADMIN : SELECT_VISITE)
       ]);
     } catch (e) {
-      el.innerHTML = ui.header(titre, intro(admin)) +
+      el.innerHTML = ui.header(titre, intro(role)) +
         ui.card(null, ui.alert('warn', 'La visite de la Cité 1 n’est pas disponible pour le moment. Réessayez plus tard.'));
       return;
     }
 
     var lignes = donnees[2];
     if (!lignes.length) {
-      el.innerHTML = ui.header(titre, intro(admin)) +
-        ui.card(null, ui.empty('Les établissements de la Cité 1 ne sont pas encore créés.'));
+      el.innerHTML = ui.header(titre, intro(role)) + ui.card(null, ui.empty(messageVide(role)));
       return;
     }
 
     var zones = classer(lignes, donnees[0], donnees[1]);
     var occupes = lignes.filter(function (e) { return e.statut === 'occupe'; }).length;
     var registre = [];
-    var haut = ui.header(titre, intro(admin)) +
+    var haut = ui.header(titre, intro(role)) +
       (admin ? ui.stats([
         ['Établissements', lignes.length, 'Cité 1'],
         ['Occupés', occupes, 'Avec un propriétaire'],
         ['Libres', lignes.length - occupes, 'Disponibles']
       ]) : '');
     el.innerHTML = haut + '<div class="cite-zones">' + zones.map(function (z) { return zoneHtml(z, admin, registre); }).join('') + '</div>';
+    courant = { el: el, admin: admin, lignes: lignes, registre: registre };
 
     /* Le contenu d’un quartier (100 emplacements) n’est dessiné qu’à son ouverture. */
     el.querySelectorAll('details[data-index]').forEach(function (d) {
