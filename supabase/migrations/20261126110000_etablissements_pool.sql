@@ -10,6 +10,9 @@
 --     Exemple : DP-C1-Z1Q1R1P1-H1A1Bg1.
 --  4. Pas d'attribution ici. Un établissement se libère ou s'occupe seulement
 --     quand l'attribution (P2) le donne à une personne.
+--  5. Visibilité de la Cité 1 (27 nov.) : bénéficiaire = toute la Cité 1 ; Hôte = sa zone ;
+--     Agent = son quartier ; partenaire = seulement les établissements rendus publics par
+--     l'Administrateur (colonne publie). Propriétaire et nom ne sortent jamais de la vue.
 --
 -- Choix techniques (à valider) :
 --  - Table distincte de `establishments`. Les 3 entreprises existantes ne sont pas touchées.
@@ -43,6 +46,7 @@ create table public.etablissements (
   ordre            integer not null check (ordre >= 1),
   owner_profile_id uuid references public.profiles(id),
   nom              text,
+  publie           boolean not null default false,
   statut           text generated always as (
                      case when owner_profile_id is null then 'libre' else 'occupe' end
                    ) stored,
@@ -76,16 +80,49 @@ create policy etablissements_read on public.etablissements
     or owner_profile_id = auth.uid()
   );
 
--- Vue « visite de la Cité 1 » : tout compte actif voit les 5 000 emplacements, avec leur code,
--- leur catégorie et s'ils sont libres ou occupés. Pas de propriétaire, pas de nom, pas de total :
--- les totaux (occupés, libres) et les propriétaires sont réservés à l'Administrateur.
+-- Vue « visite de la Cité 1 » : ce que chaque compte actif voit, avec le code, la catégorie et le statut.
+-- Jamais de propriétaire, de nom ni de total : ceux-ci restent réservés à l'Administrateur (table).
+--  - Bénéficiaire : toute la Cité 1 (réponse du promoteur, 26 nov.).
+--  - Hôte : les établissements de sa zone (réponse du 27 nov.).
+--  - Agent : les établissements de son quartier (réponse du 27 nov.). Sans quartier : aucun.
+--  - Partenaire : seulement les établissements rendus publics par l'Administrateur (27 nov.).
+--  - Administrateur : tout.
 create view public.etablissements_visite as
   select e.code, e.zone_id, e.quartier_id, e.quartier_rang, e.rue, e.categorie, e.place, e.ordre, e.statut
     from public.etablissements e
-   where exists (select 1 from public.profiles p where p.id = auth.uid() and p.status = 'active');
+    join public.profiles p on p.id = auth.uid() and p.status = 'active'
+   where p.role in ('beneficiary', 'admin')
+      or (p.role = 'host' and e.zone_id = p.zone_id)
+      or (p.role = 'agent' and e.quartier_id = p.quartier_id)
+      or (p.role = 'partner' and e.publie);
 
 revoke all on public.etablissements_visite from anon;
 grant select on public.etablissements_visite to authenticated;
+
+-- Publication aux partenaires : seul l'Administrateur rend un établissement visible, ou le retire.
+-- Pas d'écriture directe sur la table : cette fonction est la seule porte.
+create or replace function public.set_etablissement_publie(p_code text, p_publie boolean)
+returns boolean
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+begin
+  if not is_admin() then
+    raise exception 'Réservé à l’Administrateur.';
+  end if;
+  if p_publie is null then
+    raise exception 'Indiquez si l’établissement est rendu public ou non.';
+  end if;
+  update public.etablissements set publie = p_publie where code = p_code;
+  if not found then
+    raise exception 'Établissement introuvable : %', p_code;
+  end if;
+  return p_publie;
+end $function$;
+
+revoke all on function public.set_etablissement_publie(text, boolean) from public, anon;
+grant execute on function public.set_etablissement_publie(text, boolean) to authenticated;
 
 -- Pas de politique d'insertion, de modification ni de suppression pour les comptes connectés :
 -- les changements passeront par des fonctions contrôlées (P2 et suivantes).
@@ -141,6 +178,10 @@ begin
   select count(*) into v_libres from public.etablissements where statut <> 'libre';
   if v_libres <> 0 then
     raise exception 'Aucun établissement ne doit être occupé à la création (trouvé %)', v_libres;
+  end if;
+
+  if (select count(*) from public.etablissements where publie) <> 0 then
+    raise exception 'Aucun établissement ne doit être rendu public à la création';
   end if;
 
   select count(*) into v_mauvais_quartier
