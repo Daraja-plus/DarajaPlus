@@ -172,7 +172,8 @@
         '<a class="btn btn-outline" href="#/admin/resultats">Résultats à valider</a>' +
         '<a class="btn btn-outline" href="#/admin/messages">Messages</a>' +
         '<a class="btn btn-outline" href="#/admin/contacts">Contacts</a></div>' +
-        '<p class="small muted">Chaque notification de la plateforme arrive dans « Notifications ».</p>');
+        '<p class="small muted">Chaque notification de la plateforme arrive dans « Notifications ».</p>') +
+      ui.card('Cité DarajaPlus', '<div class="btn-row quick-links"><a class="btn btn-primary" href="#/cite">Visiter la Cité 1 DarajaPlus</a></div>');
     await DP.feed.mount(el);
   }
 

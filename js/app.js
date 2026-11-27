@@ -13,7 +13,7 @@
   /* Menus des espaces privés (chaque lien correspond à une route enregistrée). */
   var menus = {
     admin: [
-      ['Vue générale', '#/admin'], ['Actualités', '#/actualites'], ['Comptes à valider', '#/admin/comptes'], ['Hôtes', '#/admin/hotes'],
+      ['Vue générale', '#/admin'], ['Visiter la Cité 1 DarajaPlus', '#/cite'], ['Actualités', '#/actualites'], ['Comptes à valider', '#/admin/comptes'], ['Hôtes', '#/admin/hotes'],
       ['Agents', '#/admin/agents'], ['Bénéficiaires', '#/admin/beneficiaires'], ['Affectations', '#/admin/affectations'], ['Partenaires', '#/admin/partenaires'],
       ['Projets & besoins', '#/admin/projets'], ['Présentations', '#/admin/presentations'], ['Ponts / mises en relation', '#/admin/ponts'],
       ['Résultats déclarés', '#/admin/resultats'], ['Offres', '#/admin/offres'], ['Carrefours', '#/admin/carrefours'],
@@ -23,13 +23,13 @@
       ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
     ],
     host: [
-      ['Tableau de zone', '#/hote'], ['Actualités', '#/actualites'], ['Agents', '#/hote/agents'], ['Bénéficiaires', '#/hote/beneficiaires'],
+      ['Tableau de zone', '#/hote'], ['Actualités', '#/actualites'], ['Visiter la Cité 1 DarajaPlus', '#/cite'], ['Agents', '#/hote/agents'], ['Bénéficiaires', '#/hote/beneficiaires'],
       ['Dossiers & projets', '#/hote/dossiers'], ['Ponts', '#/hote/ponts'], ['Carrefours', '#/hote/carrefours'],
       ['Annonces', '#/hote/annonces'], ['Messages (Administrateur)', '#/messages'],
       ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
     ],
     agent: [
-      ['Accueil', '#/agent'], ['Actualités', '#/actualites'], ['Mes bénéficiaires', '#/agent/beneficiaires'], ['Catégories à proposer', '#/agent/categories'], ['Nouveau bénéficiaire', '#/agent/beneficiaires/nouveau'],
+      ['Accueil', '#/agent'], ['Actualités', '#/actualites'], ['Visiter la Cité 1 DarajaPlus', '#/cite'], ['Mes bénéficiaires', '#/agent/beneficiaires'], ['Catégories à proposer', '#/agent/categories'], ['Nouveau bénéficiaire', '#/agent/beneficiaires/nouveau'],
       ['Projets & besoins', '#/agent/projets'], ['Publications', '#/agent/offres'], ['Carrefours', '#/agent/carrefours'],
       ['Annonces', '#/agent/annonces'], ['Visibilité', '#/agent/visibilite'], ['Messages (Administrateur)', '#/messages'],
       ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
@@ -37,12 +37,12 @@
     beneficiary: [
       ['Mon tableau de bord', '#/espace'], ['Actualités', '#/actualites'], ['Ma catégorie', '#/espace/categorie'], ['Mon profil', '#/espace/profil'],
       ['Mes entreprises', '#/espace/entreprises'], ['Mes projets & besoins', '#/espace/projets'],
-      ['Mes dossiers', '#/espace/dossiers'], ['Opportunités', '#/espace/opportunites'], ['Carrefours', '#/espace/carrefours'],
+      ['Mes dossiers', '#/espace/dossiers'], ['Opportunités', '#/espace/opportunites'], ['Voir les autres établissements', '#/espace/etablissements'], ['Carrefours', '#/espace/carrefours'],
       ['Visibilité', '#/espace/visibilite'], ['Messages (Administrateur)', '#/messages'],
       ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
     ],
     partner: [
-      ['Accueil', '#/partenaire'], ['Actualités', '#/actualites'], ['Mon profil', '#/partenaire/profil'], ['Mes offres', '#/partenaire/offres'],
+      ['Accueil', '#/partenaire'], ['Actualités', '#/actualites'], ['Visiter la Cité 1 DarajaPlus', '#/cite'], ['Mon profil', '#/partenaire/profil'], ['Mes offres', '#/partenaire/offres'],
       ['Projets disponibles', '#/partenaire/recherche'], ['Mes dossiers', '#/partenaire/dossiers'],
       ['Messages (Administrateur)', '#/messages'], ['Notifications', '#/notifications'], ['Mon compte', '#/mon-compte']
     ]

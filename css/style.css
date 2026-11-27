@@ -201,6 +201,16 @@ textarea.input { min-height: 96px; resize: vertical; }
 .notif-rubrique[open] > summary::before { transform: rotate(90deg); }
 .notif-rubrique > summary:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 .notif-titre { flex: 1 1 auto; min-width: 0; }
+/* Visite de la Cité 1 : Hôte (zone) → Agent (quartier) → Bg, Bb, Ba */
+.cite-zone, .cite-quartier { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); margin: .6rem 0; min-width: 0; }
+.cite-zone > summary, .cite-quartier > summary { cursor: pointer; font-weight: 600; padding: .8rem 1rem; min-height: 44px; display: flex; align-items: center; flex-wrap: wrap; gap: .3rem; list-style: none; }
+.cite-zone > summary::-webkit-details-marker, .cite-quartier > summary::-webkit-details-marker { display: none; }
+.cite-zone > summary::before, .cite-quartier > summary::before { content: '▸'; display: inline-block; margin-right: .4rem; color: var(--muted); transition: transform .15s; }
+.cite-zone[open] > summary::before, .cite-quartier[open] > summary::before { transform: rotate(90deg); }
+.cite-quartiers { padding: 0 .6rem .6rem; }
+.cite-quartier { margin: .5rem 0; }
+.cite-corps { padding: 0 1rem 1rem; }
+.cite-cat { margin: 1rem 0 .4rem; display: flex; align-items: center; gap: .4rem; flex-wrap: wrap; }
 .notif-rubrique > .notif-list { padding: 0 1rem .4rem; }
 .thread { display: flex; flex-direction: column; gap: .6rem; max-height: 480px; overflow-y: auto; padding: .25rem; margin-bottom: 1rem; }
 .bubble { max-width: 82%; padding: .55rem .75rem; border-radius: 12px; background: #f3f4f6; }

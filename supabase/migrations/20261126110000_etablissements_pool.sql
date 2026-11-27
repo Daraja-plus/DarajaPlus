@@ -66,14 +66,26 @@ alter table public.etablissements enable row level security;
 revoke all on public.etablissements from anon, authenticated;
 grant select on public.etablissements to authenticated;
 
+-- Lecture de la table : l'Administrateur (tout, y compris les propriétaires) et le propriétaire
+-- de son propre établissement. Hôtes, Agents, partenaires et bénéficiaires ne lisent pas la table :
+-- ils passent par la vue ci-dessous, qui ne contient ni propriétaire, ni nom.
 create policy etablissements_read on public.etablissements
   for select to authenticated
   using (
     is_admin()
     or owner_profile_id = auth.uid()
-    or (my_role() = 'host' and zone_id = my_zone())
-    or (my_role() = 'agent' and quartier_id = my_quartier_id())
   );
+
+-- Vue « visite de la Cité 1 » : tout compte actif voit les 5 000 emplacements, avec leur code,
+-- leur catégorie et s'ils sont libres ou occupés. Pas de propriétaire, pas de nom, pas de total :
+-- les totaux (occupés, libres) et les propriétaires sont réservés à l'Administrateur.
+create view public.etablissements_visite as
+  select e.code, e.zone_id, e.quartier_id, e.quartier_rang, e.rue, e.categorie, e.place, e.ordre, e.statut
+    from public.etablissements e
+   where exists (select 1 from public.profiles p where p.id = auth.uid() and p.status = 'active');
+
+revoke all on public.etablissements_visite from anon;
+grant select on public.etablissements_visite to authenticated;
 
 -- Pas de politique d'insertion, de modification ni de suppression pour les comptes connectés :
 -- les changements passeront par des fonctions contrôlées (P2 et suivantes).

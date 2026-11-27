@@ -2,7 +2,7 @@
    Objectif : l'application s'ouvre même avec une connexion faible ou coupée.
    Les données (Supabase et autres services externes) ne sont jamais mises en cache : elles restent en ligne. */
 
-const CACHE = 'daraja-app-v36';
+const CACHE = 'daraja-app-v37';
 const SHELL = [
   './',
   'index.html',
@@ -23,6 +23,7 @@ const SHELL = [
   'js/presentation.js',
   'js/partner.js',
   'js/feed.js',
+  'js/cite.js',
   'assets/logo-daraja.png',
   'assets/affiche-daraja-plus.webp',
   'assets/icon-192.png',

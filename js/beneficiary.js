@@ -134,6 +134,7 @@
         '<a class="btn btn-outline" href="#/espace/projets">Mes projets et besoins</a>' +
         '<a class="btn btn-outline" href="#/espace/dossiers">Mes dossiers</a>' +
         '<a class="btn btn-outline" href="#/espace/opportunites">Opportunités</a>' +
+        '<a class="btn btn-outline" href="#/espace/etablissements">Voir les autres établissements</a>' +
         '<a class="btn btn-outline" href="#/espace/profil">Mon profil et mes pièces</a>' +
         '<a class="btn btn-ghost" href="#/messages">Écrire à l’Administrateur</a></div>');
     await DP.feed.mount(el);
